@@ -1,5 +1,4 @@
 import { initializeApp } from "firebase/app";
-// Import only the functions you need from the auth SDK
 import {
     getAuth,
     signInWithPopup,
@@ -12,7 +11,6 @@ import {
     updateProfile,
 } from "firebase/auth";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-// Import all necessary Firestore functions
 import {
     getFirestore,
     doc,
@@ -25,10 +23,11 @@ import {
     query,
     where,
     updateDoc,
+    orderBy, // This was missing from the consolidated import list
 } from "firebase/firestore";
-// getStorage is removed as it's not used in this file
+import { v4 as uuidv4 } from 'uuid';
 
-// Your web app's Firebase configuration, using environment variables
+// --- Your firebaseConfig remains the same ---
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -39,23 +38,14 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize and export Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-// You can initialize storage here if you plan to use it later,
-// but it's not required by the current functions.
-// export const storage = getStorage(app); 
+export const storage = getStorage(app);
 
-// Create a new instance of the Google provider
 const googleProvider = new GoogleAuthProvider();
 
-/**
- * Signs in the user with a Google account and dynamically verifies their email domain
- * by checking against a 'colleges' collection in Firestore.
- */
 export const signInWithGoogle = async () => {
     try {
         const result = await signInWithPopup(auth, googleProvider);
@@ -88,50 +78,32 @@ export const signInWithGoogle = async () => {
                 collegeName: collegeData.name,
                 createdAt: new Date()
             });
-            console.log("New user document created in Firestore.");
         }
-
-        console.log(`Successfully signed in for ${collegeData.name}:`, user);
         return user;
-
     } catch (error) {
         console.error("Error during Google sign-in:", error);
-        alert(error.message);
-        return null;
+        throw error;
     }
 };
 
-/**
- * Signs out the current user.
- */
 export const logout = async () => {
     try {
         await signOut(auth);
-        console.log("User signed out successfully.");
     } catch (error) {
         console.error("Error signing out:", error);
     }
 };
 
-// --- ADMIN FUNCTIONS ---
-
-/**
- * Adds a new college document to the 'colleges' collection.
- */
 export const addCollege = async (name, domain) => {
     const collegesRef = collection(db, "colleges");
     await addDoc(collegesRef, {
         name: name,
         domain: domain,
+        festMode: false,
         createdAt: new Date(),
     });
 };
 
-/**
- * Sets up a real-time listener for the 'colleges' collection.
- * @param {function} callback - The function to call with the updated list of colleges.
- * @returns {function} - An unsubscribe function to detach the listener.
- */
 export const onCollegesUpdate = (callback) => {
     const collegesRef = collection(db, "colleges");
     const unsubscribe = onSnapshot(collegesRef, (snapshot) => {
@@ -141,10 +113,6 @@ export const onCollegesUpdate = (callback) => {
     return unsubscribe;
 };
 
-
-/**
- * Creates a new user with email and password and verifies their domain.
- */
 export const signUpWithEmail = async (email, password) => {
     try {
         const emailDomain = email.split('@')[1];
@@ -175,6 +143,7 @@ export const signUpWithEmail = async (email, password) => {
         throw error;
     }
 };
+
 export const resendVerificationEmail = () => {
     if (auth.currentUser) {
         return sendEmailVerification(auth.currentUser);
@@ -182,16 +151,12 @@ export const resendVerificationEmail = () => {
     throw new Error("No user is currently signed in to resend verification email.");
 };
 
-/**
- * Signs in an existing user with email and password.
- */
 export const signInWithEmail = async (email, password) => {
     try {
         const result = await signInWithEmailAndPassword(auth, email, password);
         return result.user;
     } catch (error) {
         console.error("Error during email sign-in:", error);
-        // Re-throw the error so the component can catch it and display it
         throw error;
     }
 };
@@ -206,25 +171,91 @@ export const sendPasswordReset = async (email) => {
 };
 
 export const updateUserProfile = async (userId, data) => {
-    // Update the profile in Firebase Authentication
     if (auth.currentUser) {
         await updateProfile(auth.currentUser, data);
     }
-
-    // Update the user document in Firestore
     const userDocRef = doc(db, 'users', userId);
     await updateDoc(userDocRef, data);
 };
+
 export const uploadProfileImage = async (file, userId) => {
-    const storage = getStorage();
-    // Create a reference to the file location
     const fileRef = ref(storage, `profile-pictures/${userId}`);
-
-    // Upload the file
     await uploadBytes(fileRef, file);
-
-    // Get the public download URL
     const photoURL = await getDownloadURL(fileRef);
-
     return photoURL;
+};
+
+export const uploadEventPoster = async (file, eventId) => {
+    const filePath = `event-posters/${eventId}/${file.name}`;
+    const fileRef = ref(storage, filePath);
+    await uploadBytes(fileRef, file);
+    const photoURL = await getDownloadURL(fileRef);
+    return photoURL;
+};
+
+export const createEvent = async (eventData, posterFile) => {
+    const eventId = uuidv4();
+    try {
+        const posterURL = await uploadEventPoster(posterFile, eventId);
+        const finalEventData = {
+            ...eventData,
+            id: eventId,
+            posterURL,
+            createdAt: new Date(),
+        };
+        await setDoc(doc(db, "events", eventId), finalEventData);
+    } catch (error) {
+        console.error("Error creating event:", error);
+        throw error;
+    }
+};
+
+export const getApprovedEventsByCollege = async (collegeId) => {
+    if (!collegeId) {
+        return [];
+    }
+    try {
+        // Get a reference to the Cloud Function
+        const getUpcomingEventsFunction = httpsCallable(functions, 'getUpcomingEvents');
+
+        // Call the function with the collegeId
+        const result = await getUpcomingEventsFunction({ collegeId: collegeId });
+
+        // The events are in the 'data' property of the result
+        return result.data;
+
+    } catch (error) {
+        console.error("Error fetching approved events via Cloud Function:", error);
+        throw error;
+    }
+};
+
+export const getPendingEventsByCollege = async (collegeId) => {
+    if (!collegeId) return [];
+    try {
+        const eventsRef = collection(db, "events");
+        const q = query(
+            eventsRef,
+            where("collegeId", "==", collegeId),
+            where("status", "==", "pending"),
+            orderBy("createdAt", "asc")
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Error fetching pending events:", error);
+        throw error;
+    }
+};
+
+export const updateEventStatus = async (eventId, status) => {
+    try {
+        const eventRef = doc(db, "events", eventId);
+        await updateDoc(eventRef, {
+            status: status
+        });
+    } catch (error) {
+        console.error("Error updating event status:", error);
+        throw error;
+    }
 };

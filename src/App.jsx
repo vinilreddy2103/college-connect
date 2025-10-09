@@ -1,7 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-
-// 1. Import ToastContainer and its CSS
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -13,17 +11,16 @@ import SignupPage from './pages/SignupPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AdminPage from './pages/AdminPage';
+import CollegeAdminPage from './pages/CollegeAdminPage'; // Import new page
 import AdminRoute from './components/AdminRoute';
+import CollegeAdminRoute from './components/CollegeAdminRoute'; // Import new route
 import ProtectedRoute from './components/ProtectedRoute';
 import ProfilePage from './pages/ProfilePage';
-//import CreateEventPage from './pages/CreateEventPage';
-//import EventsPage from './pages/EventsPage';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        {/* 2. Place the ToastContainer here */}
         <ToastContainer
           position="top-right"
           autoClose={5000}
@@ -38,7 +35,6 @@ function App() {
         />
 
         <Routes>
-          {/* ... all your existing routes ... */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -47,6 +43,9 @@ function App() {
           <Route path="/dashboard" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+
+          {/* Add the new route for the College Admin page */}
+          <Route path="/college-admin" element={<CollegeAdminRoute><CollegeAdminPage /></CollegeAdminRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

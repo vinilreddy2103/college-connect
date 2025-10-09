@@ -1,50 +1,58 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
-// Create the context
 const AuthContext = createContext();
 
-// Custom hook to use the auth context
 export function useAuth() {
     return useContext(AuthContext);
 }
 
-// Provider component that wraps your app
 export function AuthProvider({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [userData, setUserData] = useState(null);
+    const [collegeSettings, setCollegeSettings] = useState({ festMode: false }); // Add state for college settings
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Listen for authentication state changes
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
             if (user) {
-                // If user is logged in, fetch their data from Firestore
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
-                    setUserData(userDocSnap.data());
+                    const fetchedUserData = userDocSnap.data();
+                    setUserData(fetchedUserData);
+
+                    // If user has a collegeId, listen for changes to college settings
+                    if (fetchedUserData.collegeId) {
+                        const collegeRef = doc(db, 'colleges', fetchedUserData.collegeId);
+                        const unsubscribeCollege = onSnapshot(collegeRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                setCollegeSettings(docSnap.data());
+                            }
+                        });
+                        // We'll need to manage this unsubscribe later if the user logs out
+                    }
                 }
             } else {
                 setUserData(null);
+                setCollegeSettings({ festMode: false });
             }
             setLoading(false);
         });
 
-        // Cleanup subscription on unmount
-        return unsubscribe;
+        return unsubscribeAuth;
     }, []);
 
     const value = {
         currentUser,
         userData,
+        collegeSettings, // Provide settings to the rest of the app
         loading,
     };
 
-    // Don't render children until the loading state is false
     return (
         <AuthContext.Provider value={value}>
             {!loading && children}
