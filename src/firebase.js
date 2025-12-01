@@ -9,6 +9,7 @@ import {
     sendEmailVerification,
     sendPasswordResetEmail,
     updateProfile,
+    getIdToken,
 } from "firebase/auth";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
@@ -23,11 +24,15 @@ import {
     query,
     where,
     updateDoc,
-    orderBy, // This was missing from the consolidated import list
+    orderBy,
+    serverTimestamp, // New import
+    deleteDoc,       // New import'
+    documentId,
 } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { v4 as uuidv4 } from 'uuid';
 
-// --- Your firebaseConfig remains the same ---
+// --- firebaseConfig remains the same ---
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -43,8 +48,11 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+const functions = getFunctions(app);
 
 const googleProvider = new GoogleAuthProvider();
+
+// --- All auth functions (signInWithGoogle, logout, etc.) remain the same ---
 
 export const signInWithGoogle = async () => {
     try {
@@ -215,15 +223,9 @@ export const getApprovedEventsByCollege = async (collegeId) => {
         return [];
     }
     try {
-        // Get a reference to the Cloud Function
         const getUpcomingEventsFunction = httpsCallable(functions, 'getUpcomingEvents');
-
-        // Call the function with the collegeId
         const result = await getUpcomingEventsFunction({ collegeId: collegeId });
-
-        // The events are in the 'data' property of the result
         return result.data;
-
     } catch (error) {
         console.error("Error fetching approved events via Cloud Function:", error);
         throw error;
@@ -256,6 +258,87 @@ export const updateEventStatus = async (eventId, status) => {
         });
     } catch (error) {
         console.error("Error updating event status:", error);
+        throw error;
+    }
+};
+
+// --- NEW REGISTRATION FUNCTIONS ---
+
+// Register a user for an event
+export const registerForEvent = async (eventId, userId, userDisplayName) => {
+    const registrationRef = doc(db, 'events', eventId, 'registrations', userId);
+    await setDoc(registrationRef, {
+        displayName: userDisplayName,
+        registrationTime: serverTimestamp()
+    });
+};
+
+// Unregister a user from an event
+export const unregisterFromEvent = async (eventId, userId) => {
+    const registrationRef = doc(db, 'events', eventId, 'registrations', userId);
+    await deleteDoc(registrationRef);
+};
+
+// Listen to all events a user is registered for
+export const onUserRegistrationsChange = (userId, callback) => {
+    const eventsRef = collection(db, 'events');
+    // This is a more complex query that Firestore doesn't support directly.
+    // We will listen to all events and filter on the client side for simplicity.
+    // A better solution for a very large number of events would be a top-level registrations collection.
+
+    const unsubscribe = onSnapshot(eventsRef, async (snapshot) => {
+        const registeredEventIds = new Set();
+        const promises = [];
+
+        snapshot.forEach((eventDoc) => {
+            const promise = getDoc(doc(db, 'events', eventDoc.id, 'registrations', userId))
+                .then(regDoc => {
+                    if (regDoc.exists()) {
+                        registeredEventIds.add(eventDoc.id);
+                    }
+                });
+            promises.push(promise);
+        });
+
+        await Promise.all(promises);
+        callback(registeredEventIds);
+    });
+
+    return unsubscribe;
+};
+
+export const getEventsByIds = async (eventIds) => {
+    if (!eventIds || eventIds.length === 0) {
+        return [];
+    }
+
+    const eventsRef = collection(db, "events");
+    const events = [];
+
+    // Firestore 'in' queries are limited to 30 elements, so we chunk the array.
+    const chunks = [];
+    for (let i = 0; i < eventIds.length; i += 30) {
+        chunks.push(eventIds.slice(i, i + 30));
+    }
+
+    try {
+        const queryPromises = chunks.map(chunk => {
+            const q = query(eventsRef, where(documentId(), 'in', chunk));
+            return getDocs(q);
+        });
+
+        const querySnapshots = await Promise.all(queryPromises);
+
+        querySnapshots.forEach(snapshot => {
+            snapshot.forEach(doc => {
+                events.push({ id: doc.id, ...doc.data() });
+            });
+        });
+
+        return events;
+
+    } catch (error) {
+        console.error("Error fetching events by IDs:", error);
         throw error;
     }
 };

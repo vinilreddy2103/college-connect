@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom'; // Import Link
 import { FaCalendarAlt, FaClock, FaMapMarkerAlt } from 'react-icons/fa';
 
 function EventCard({ event }) {
@@ -11,7 +12,6 @@ function EventCard({ event }) {
     });
 
     return (
-        // The only change is on this line: bg-slate-800 is now bg-slate-700
         <div className="bg-slate-700 rounded-lg shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-300">
             <img
                 src={event.posterURL || placeholderImage}
@@ -38,9 +38,13 @@ function EventCard({ event }) {
                 </div>
 
                 <div className="mt-4 text-right">
-                    <button className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700">
+                    {/* Changed button to a Link */}
+                    <Link
+                        to={`/event/${event.id}`}
+                        className="inline-block px-4 py-2 text-xs font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700"
+                    >
                         View Details
-                    </button>
+                    </Link>
                 </div>
             </div>
         </div>

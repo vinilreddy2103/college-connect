@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import AuthProvider from './context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -11,11 +11,13 @@ import SignupPage from './pages/SignupPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AdminPage from './pages/AdminPage';
-import CollegeAdminPage from './pages/CollegeAdminPage'; // Import new page
+import CollegeAdminPage from './pages/CollegeAdminPage';
 import AdminRoute from './components/AdminRoute';
-import CollegeAdminRoute from './components/CollegeAdminRoute'; // Import new route
+import CollegeAdminRoute from './components/CollegeAdminRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import ProfilePage from './pages/ProfilePage';
+import EventDetailsPage from './pages/EventDetailsPage';
+import RegisteredEventsPage from './pages/RegisteredEventsPage'; // Import the new page
 
 function App() {
   return (
@@ -43,9 +45,12 @@ function App() {
           <Route path="/dashboard" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-
-          {/* Add the new route for the College Admin page */}
           <Route path="/college-admin" element={<CollegeAdminRoute><CollegeAdminPage /></CollegeAdminRoute>} />
+          <Route path="/event/:eventId" element={<ProtectedRoute><EventDetailsPage /></ProtectedRoute>} />
+
+          {/* --- ADD THIS NEW ROUTE --- */}
+          <Route path="/my-events" element={<ProtectedRoute><RegisteredEventsPage /></ProtectedRoute>} />
+
         </Routes>
       </BrowserRouter>
     </AuthProvider>

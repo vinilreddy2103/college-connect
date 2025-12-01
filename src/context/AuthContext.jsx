@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+// Import the new function for listening to registrations
+import { auth, db, onUserRegistrationsChange } from '../firebase';
 
 const AuthContext = createContext();
 
@@ -9,47 +10,70 @@ export function useAuth() {
     return useContext(AuthContext);
 }
 
-export function AuthProvider({ children }) {
+export default function AuthProvider({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [userData, setUserData] = useState(null);
-    const [collegeSettings, setCollegeSettings] = useState({ festMode: false }); // Add state for college settings
+    const [collegeSettings, setCollegeSettings] = useState({ festMode: false });
+    // --- NEW: State to track registered events ---
+    const [registeredEvents, setRegisteredEvents] = useState(new Set());
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // --- NEW: Placeholder for the registration listener cleanup function ---
+        let unsubscribeRegistrations = () => { };
+        let unsubscribeCollege = () => { };
+
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
             if (user) {
+                // --- NEW: Clean up any previous user's registration listener ---
+                unsubscribeRegistrations();
+                unsubscribeCollege();
+
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     const fetchedUserData = userDocSnap.data();
                     setUserData(fetchedUserData);
 
-                    // If user has a collegeId, listen for changes to college settings
+                    // --- NEW: Set up a listener for the current user's registrations ---
+                    unsubscribeRegistrations = onUserRegistrationsChange(user.uid, (eventIds) => {
+                        setRegisteredEvents(eventIds);
+                    });
+
                     if (fetchedUserData.collegeId) {
                         const collegeRef = doc(db, 'colleges', fetchedUserData.collegeId);
-                        const unsubscribeCollege = onSnapshot(collegeRef, (docSnap) => {
+                        unsubscribeCollege = onSnapshot(collegeRef, (docSnap) => {
                             if (docSnap.exists()) {
                                 setCollegeSettings(docSnap.data());
                             }
                         });
-                        // We'll need to manage this unsubscribe later if the user logs out
                     }
                 }
             } else {
                 setUserData(null);
                 setCollegeSettings({ festMode: false });
+                // --- NEW: Clear registrations and clean up listeners on logout ---
+                setRegisteredEvents(new Set());
+                unsubscribeRegistrations();
+                unsubscribeCollege();
             }
             setLoading(false);
         });
 
-        return unsubscribeAuth;
+        return () => {
+            unsubscribeAuth();
+            // --- NEW: Ensure all listeners are cleaned up on component unmount ---
+            unsubscribeRegistrations();
+            unsubscribeCollege();
+        };
     }, []);
 
     const value = {
         currentUser,
         userData,
-        collegeSettings, // Provide settings to the rest of the app
+        collegeSettings,
+        registeredEvents, // --- NEW: Provide registered events to the app ---
         loading,
     };
 

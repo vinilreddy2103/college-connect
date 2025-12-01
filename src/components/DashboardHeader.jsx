@@ -7,12 +7,11 @@ import { FaUserCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
 function DashboardHeader({ onOpenCreateEvent }) {
-    const { userData, collegeSettings } = useAuth(); // Get collegeSettings from context
+    const { userData, collegeSettings } = useAuth();
     const navigate = useNavigate();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
 
-    // Dynamic check for event creation permission
     const canCreateEvent =
         userData?.role === 'club-lead' ||
         userData?.role === 'collegeAdmin' ||
@@ -58,7 +57,12 @@ function DashboardHeader({ onOpenCreateEvent }) {
                     <div className="hidden md:block">
                         <div className="ml-10 flex items-baseline space-x-4">
                             <Link to="/dashboard" className="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Dashboard</Link>
-                            <Link to="/events" className="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Events</Link>
+
+                            {/* --- THIS IS THE NEW LINK --- */}
+                            <Link to="/my-events" className="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">My Events</Link>
+
+                            {/* This "Events" link was a bit redundant, so I've removed it for clarity, but you can add it back if you wish */}
+                            {/* <Link to="/events" className="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Events</Link> */}
 
                             {canCreateEvent && (
                                 <button
