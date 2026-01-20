@@ -18,6 +18,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ProfilePage from './pages/ProfilePage';
 import EventDetailsPage from './pages/EventDetailsPage';
 import RegisteredEventsPage from './pages/RegisteredEventsPage'; // Import the new page
+import AdminLoginPage from './pages/AdminLoginPage';
+import PrivateRoute from './components/PrivateRoute';
 
 function App() {
   return (
@@ -39,6 +41,8 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/super-admin" element={<PrivateRoute><AdminPage /></PrivateRoute>} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />

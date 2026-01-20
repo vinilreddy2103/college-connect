@@ -1,8 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom'; // Import Link
 import { FaCalendarAlt, FaClock, FaMapMarkerAlt } from 'react-icons/fa';
 
-function EventCard({ event }) {
+// Added 'onViewDetails' prop
+function EventCard({ event, onViewDetails }) {
     const placeholderImage = 'https://via.placeholder.com/400x200.png?text=Event+Poster';
 
     const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
@@ -16,7 +16,8 @@ function EventCard({ event }) {
             <img
                 src={event.posterURL || placeholderImage}
                 alt={`${event.title} Poster`}
-                className="w-full h-48 object-cover"
+                className="w-full h-48 object-cover cursor-pointer"
+                onClick={() => onViewDetails(event)} // Clicking image also opens details
             />
             <div className="p-4">
                 <h3 className="text-xl font-bold text-white truncate">{event.title}</h3>
@@ -38,13 +39,13 @@ function EventCard({ event }) {
                 </div>
 
                 <div className="mt-4 text-right">
-                    {/* Changed button to a Link */}
-                    <Link
-                        to={`/event/${event.id}`}
+                    {/* Changed from Link to Button */}
+                    <button
+                        onClick={() => onViewDetails(event)}
                         className="inline-block px-4 py-2 text-xs font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700"
                     >
                         View Details
-                    </Link>
+                    </button>
                 </div>
             </div>
         </div>

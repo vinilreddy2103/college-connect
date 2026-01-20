@@ -6,12 +6,14 @@ import Modal from '../components/Modal';
 import CreateEventForm from '../components/CreateEventForm';
 import EventCard from '../components/EventCard';
 import { getApprovedEventsByCollege, getPendingEventsByCollege, updateEventStatus } from '../firebase';
-import { toast } from 'react-toastify'; // This line was missing
+import { toast } from 'react-toastify';
+import EventDetailsModal from '../components/EventDetailsModal';
 
 // --- StudentDashboard ---
 const StudentDashboard = ({ userData }) => {
     const [events, setEvents] = useState([]);
     const [loadingEvents, setLoadingEvents] = useState(true);
+    const [selectedEvent, setSelectedEvent] = useState(null);
 
     useEffect(() => {
         const fetchEvents = async () => {
@@ -39,11 +41,23 @@ const StudentDashboard = ({ userData }) => {
             ) : events.length > 0 ? (
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {events.map(event => (
-                        <EventCard key={event.id} event={event} />
+                        <EventCard 
+                            key={event.id} 
+                            event={event} 
+                            onViewDetails={(evt) => setSelectedEvent(evt)}
+                        />
                     ))}
                 </div>
             ) : (
                 <p className="mt-6 text-center text-gray-500">No upcoming events have been approved yet. Check back soon!</p>
+            )}
+
+            {selectedEvent && (
+                <EventDetailsModal 
+                    isOpen={!!selectedEvent} 
+                    event={selectedEvent} 
+                    onClose={() => setSelectedEvent(null)} 
+                />
             )}
         </div>
     );
@@ -54,14 +68,14 @@ const ClubLeadDashboard = ({ userData, onOpenCreateEvent }) => (
     <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold text-sky-400">Club Lead Dashboard</h2>
         <p className="mt-4 text-gray-300">Welcome, {userData.displayName}! Manage your club's events here.</p>
-        <button onClick={onOpenCreateEvent} className="mt-4 px-4 py-2 bg-sky-600 rounded-lg hover:bg-sky-700">
+        <button onClick={onOpenCreateEvent} className="mt-4 px-4 py-2 bg-sky-600 rounded-lg hover:bg-sky-700 font-medium text-white transition-colors">
             + New Event
         </button>
     </div>
 );
 
-// --- AdminDashboard ---
-const AdminDashboard = ({ userData }) => {
+// --- CollegeAdminDashboard (Renamed from AdminDashboard for clarity) ---
+const CollegeAdminDashboard = ({ userData }) => {
     const [pendingEvents, setPendingEvents] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -92,9 +106,9 @@ const AdminDashboard = ({ userData }) => {
     return (
         <div className="bg-slate-800 p-8 rounded-lg shadow-lg space-y-8">
             <div>
-                <h2 className="text-2xl font-bold text-sky-400">Admin Dashboard</h2>
+                <h2 className="text-2xl font-bold text-sky-400">College Admin Dashboard</h2>
                 <p className="mt-2 text-gray-400">Manage your college settings and approve new events.</p>
-                <Link to="/college-admin" className="mt-4 inline-block px-4 py-2 bg-slate-600 rounded-lg hover:bg-slate-700">
+                <Link to="/college-admin" className="mt-4 inline-block px-4 py-2 bg-slate-600 rounded-lg hover:bg-slate-700 text-white transition-colors">
                     Go to Settings
                 </Link>
             </div>
@@ -102,7 +116,7 @@ const AdminDashboard = ({ userData }) => {
             <div>
                 <h3 className="text-xl font-semibold text-white">Events Pending Approval</h3>
                 {loading ? (
-                    <p className="mt-4">Loading pending events...</p>
+                    <p className="mt-4 text-gray-400">Loading pending events...</p>
                 ) : pendingEvents.length > 0 ? (
                     <div className="mt-4 space-y-4">
                         {pendingEvents.map(event => (
@@ -113,8 +127,8 @@ const AdminDashboard = ({ userData }) => {
                                     <p className="text-sm text-gray-400">Date: {new Date(event.date).toLocaleDateString()}</p>
                                 </div>
                                 <div className="flex space-x-2 mt-4 sm:mt-0">
-                                    <button onClick={() => handleEventStatusUpdate(event.id, 'approved')} className="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 rounded-lg">Approve</button>
-                                    <button onClick={() => handleEventStatusUpdate(event.id, 'rejected')} className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 rounded-lg">Reject</button>
+                                    <button onClick={() => handleEventStatusUpdate(event.id, 'approved')} className="px-3 py-1 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg transition-colors">Approve</button>
+                                    <button onClick={() => handleEventStatusUpdate(event.id, 'rejected')} className="px-3 py-1 text-sm bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors">Reject</button>
                                 </div>
                             </div>
                         ))}
@@ -133,21 +147,23 @@ function HomePage() {
     const [isCreateEventModalOpen, setCreateEventModalOpen] = useState(false);
 
     const renderDashboard = () => {
-        if (!userData) return <p>Loading user data...</p>;
+        if (!userData) return <p className="text-center text-gray-400">Loading user data...</p>;
+        
         switch (userData.role) {
             case 'student':
                 return <StudentDashboard userData={userData} />;
             case 'club-lead':
-                return <ClubLeadDashboard userData={userData} onOpenCreateEvent={() => setCreateEventModalOpen(true)} />;
-            case 'collegeAdmin':
-                return <AdminDashboard userData={userData} />;
-            case 'webAppAdmin':
+                // Club leads usually want to see the student dashboard too, plus their special buttons
+                // So we can render both or a combined view. For now, showing both:
                 return (
-                    <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
-                        <h2 className="text-2xl font-bold text-sky-400">WebApp Admin Dashboard</h2>
-                        <p className="mt-4 text-gray-300">Welcome! Manage colleges from the <Link to="/admin" className="text-sky-400 hover:underline">WebApp Admin Portal</Link>.</p>
+                    <div className="space-y-8">
+                        <ClubLeadDashboard userData={userData} onOpenCreateEvent={() => setCreateEventModalOpen(true)} />
+                        <StudentDashboard userData={userData} />
                     </div>
                 );
+            case 'collegeAdmin':
+                return <CollegeAdminDashboard userData={userData} />;
+            // Removed webAppAdmin case
             default:
                 return <StudentDashboard userData={userData} />;
         }
