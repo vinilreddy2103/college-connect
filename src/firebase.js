@@ -426,3 +426,14 @@ export const getEventsByIds = async (eventIds) => {
         throw error;
     }
 };
+
+export const generateAiPoster = async (promptData) => {
+    try {
+        const generateFunction = httpsCallable(functions, 'generateEventPoster');
+        const result = await generateFunction(promptData);
+        return result.data.imageUrl; // Returns the Base64 string
+    } catch (error) {
+        console.error("Error generating AI poster:", error);
+        throw error;
+    }
+};
