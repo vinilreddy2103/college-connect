@@ -5,6 +5,10 @@ import { db, registerForEvent, unregisterFromEvent } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import { FaArrowLeft, FaCalendarAlt, FaClock, FaMapMarkerAlt, FaUserPlus, FaUserCheck } from 'react-icons/fa';
+import LikeButton from '../components/LikeButton';
+import LikedByModal from '../components/LikedByModal';
+import ShareButton from '../components/ShareButton';
+import CommentSection from '../components/CommentSection';
 
 function EventDetailsPage() {
     const { eventId } = useParams();
@@ -12,9 +16,8 @@ function EventDetailsPage() {
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isRegistering, setIsRegistering] = useState(false);
-
-    // --- NEW: Local state for immediate UI feedback ---
     const [isLocallyRegistered, setIsLocallyRegistered] = useState(false);
+    const [showLikedBy, setShowLikedBy] = useState(false);
 
     useEffect(() => {
         const fetchEvent = async () => {
@@ -39,7 +42,6 @@ function EventDetailsPage() {
         }
     }, [eventId]);
 
-    // --- NEW: Sync local state with the context when it changes ---
     useEffect(() => {
         setIsLocallyRegistered(registeredEvents.has(eventId));
     }, [registeredEvents, eventId]);
@@ -47,8 +49,6 @@ function EventDetailsPage() {
 
     const handleRegistration = async () => {
         setIsRegistering(true);
-
-        // --- NEW: Optimistically update the local state immediately ---
         const wasRegistered = isLocallyRegistered;
         setIsLocallyRegistered(!wasRegistered);
 
@@ -61,7 +61,6 @@ function EventDetailsPage() {
                 toast.success("Successfully registered for the event!");
             }
         } catch (error) {
-            // --- NEW: If the database call fails, revert the local state ---
             setIsLocallyRegistered(wasRegistered);
             toast.error("An error occurred. Please try again.");
             console.error("Registration error:", error);
@@ -106,7 +105,7 @@ function EventDetailsPage() {
 
                         <p className="text-gray-300 mb-6">{event.description}</p>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 text-sm">
                             <div className="flex items-center bg-slate-700 p-3 rounded-lg">
                                 <FaCalendarAlt className="mr-3 text-sky-400" />
                                 <span>{formattedDate}</span>
@@ -121,12 +120,27 @@ function EventDetailsPage() {
                             </div>
                         </div>
 
-                        <div className="text-center">
+                        {/* Social engagement section */}
+                        <div className="flex flex-wrap items-center gap-4 mb-6 pb-6 border-b border-slate-700">
+                            <LikeButton 
+                                eventId={event.id}
+                                eventTitle={event.title}
+                                eventPosterURL={event.posterURL}
+                                onShowLikes={() => setShowLikedBy(true)}
+                            />
+                            <ShareButton
+                                eventId={event.id}
+                                eventTitle={event.title}
+                                eventDescription={event.description}
+                            />
+                        </div>
+
+                        {/* Registration button */}
+                        <div className="text-center mb-8">
                             <button
                                 onClick={handleRegistration}
                                 disabled={isRegistering}
                                 className={`w-full sm:w-auto px-8 py-3 text-lg font-semibold rounded-lg transition-colors duration-300 disabled:opacity-50 flex items-center justify-center mx-auto ${
-                                    // --- CHANGED: Use local state for the button's appearance ---
                                     isLocallyRegistered
                                         ? 'bg-red-600 hover:bg-red-700 text-white'
                                         : 'bg-green-600 hover:bg-green-700 text-white'
@@ -145,9 +159,26 @@ function EventDetailsPage() {
                                 )}
                             </button>
                         </div>
+
+                        {/* Comments section */}
+                        <div className="pt-6 border-t border-slate-700">
+                            <CommentSection 
+                                eventId={event.id} 
+                                eventOrganizerId={event.organizerId}
+                                eventTitle={event.title}
+                                eventPosterURL={event.posterURL}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* Liked by modal */}
+            <LikedByModal
+                isOpen={showLikedBy}
+                onClose={() => setShowLikedBy(false)}
+                eventId={eventId}
+            />
         </div>
     );
 }

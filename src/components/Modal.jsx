@@ -1,26 +1,51 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { FaTimes } from 'react-icons/fa';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
+    // Lock body scroll when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
-        // 1. Backdrop (Fixed, covers whole screen)
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+            onClick={onClose}
+        >
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
             
-            {/* 2. Modal Container (Constrained Height, Scrollable) */}
-            <div className="bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-700">
+            {/* Modal Container */}
+            <div 
+                className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden animate-slide-up"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Close button */}
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-4 right-4 z-10 p-2 rounded-xl bg-slate-800/80 text-gray-400 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                    <FaTimes size={16} />
+                </button>
                 
-                {/* Header (Stays Fixed at Top) */}
-                <div className="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800 rounded-t-lg shrink-0">
-                    <h2 className="text-xl font-bold text-white">{title}</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white transition">
-                        <FaTimes size={20} />
-                    </button>
-                </div>
+                {/* Header (if title provided) */}
+                {title && (
+                    <div className="px-6 py-4 border-b border-slate-800 shrink-0">
+                        <h2 className="text-xl font-bold text-white pr-10">{title}</h2>
+                    </div>
+                )}
 
-                {/* Body (Scrolls independently) */}
-                <div className="p-6 overflow-y-auto custom-scrollbar">
+                {/* Body */}
+                <div className="p-6 overflow-y-auto">
                     {children}
                 </div>
             </div>

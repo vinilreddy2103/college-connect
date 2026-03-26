@@ -4,7 +4,7 @@ import { createEvent, generateAiPoster } from '../firebase';
 import { toast } from 'react-toastify';
 import { constructSmartPrompt } from '../utils/aiPromptUtils'; 
 import AutoPoster from './AutoPoster';
-import { FaMagic } from 'react-icons/fa'; // Make sure to install: npm install react-icons
+import { FaMagic, FaRupeeSign, FaUsers, FaTicketAlt } from 'react-icons/fa';
 
 function CreateEventForm({ onClose }) {
     const { userData } = useAuth();
@@ -22,6 +22,13 @@ function CreateEventForm({ onClose }) {
     const [aiLoading, setAiLoading] = useState(false);
     const [aiImage, setAiImage] = useState(null); 
     const [eventType, setEventType] = useState('general');
+
+    // --- Paid Event State ---
+    const [isPaid, setIsPaid] = useState(false);
+    const [price, setPrice] = useState('');
+    const [hasCapacity, setHasCapacity] = useState(false);
+    const [maxCapacity, setMaxCapacity] = useState('');
+    const [refundPolicy, setRefundPolicy] = useState('no_refund');
 
     const isCollegeAdmin = userData?.role === 'collegeAdmin';
 
@@ -66,6 +73,18 @@ function CreateEventForm({ onClose }) {
             toast.error("All fields, including a poster, are required.");
             return;
         }
+
+        // Validate paid event fields
+        if (isPaid && (!price || parseFloat(price) <= 0)) {
+            toast.error("Please enter a valid price for the paid event.");
+            return;
+        }
+
+        if (hasCapacity && (!maxCapacity || parseInt(maxCapacity) <= 0)) {
+            toast.error("Please enter a valid capacity limit.");
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -81,6 +100,16 @@ function CreateEventForm({ onClose }) {
                 collegeId: userData.collegeId,
                 collegeName: userData.collegeName,
                 status: eventStatus,
+                eventType,
+                // Pricing fields
+                isPaid,
+                price: isPaid ? Math.round(parseFloat(price) * 100) : 0, // Store in paisa
+                // Capacity fields
+                hasCapacity,
+                maxCapacity: hasCapacity ? parseInt(maxCapacity) : null,
+                registrationCount: 0,
+                // Refund policy
+                refundPolicy: isPaid ? refundPolicy : null,
             };
 
             // posterFile will be either the manual File OR the Blob from AutoPoster
@@ -175,7 +204,108 @@ function CreateEventForm({ onClose }) {
                 />
             </div>
 
-            {/* 6. Poster Section (AI + Manual) */}
+            {/* 6. Pricing Section */}
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 space-y-4">
+                <div className="flex items-center gap-3">
+                    <FaTicketAlt className="text-fuchsia-400" />
+                    <span className="text-sm font-medium text-gray-300">Event Pricing</span>
+                </div>
+                
+                {/* Free/Paid Toggle */}
+                <div className="flex gap-4">
+                    <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition ${!isPaid ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400' : 'bg-slate-700 border-slate-600 text-gray-400 hover:border-slate-500'}`}>
+                        <input
+                            type="radio"
+                            name="eventPricing"
+                            checked={!isPaid}
+                            onChange={() => setIsPaid(false)}
+                            className="sr-only"
+                        />
+                        <span className="font-semibold">Free Event</span>
+                    </label>
+                    <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition ${isPaid ? 'bg-fuchsia-600/20 border-fuchsia-500 text-fuchsia-400' : 'bg-slate-700 border-slate-600 text-gray-400 hover:border-slate-500'}`}>
+                        <input
+                            type="radio"
+                            name="eventPricing"
+                            checked={isPaid}
+                            onChange={() => setIsPaid(true)}
+                            className="sr-only"
+                        />
+                        <FaRupeeSign className="text-sm" />
+                        <span className="font-semibold">Paid Event</span>
+                    </label>
+                </div>
+
+                {/* Price Input (Conditional) */}
+                {isPaid && (
+                    <div className="animate-fadeIn space-y-4">
+                        <div>
+                            <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-1">
+                                Ticket Price (₹)
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                                <input
+                                    id="price"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={price}
+                                    onChange={(e) => setPrice(e.target.value)}
+                                    placeholder="199"
+                                    className="pl-8 w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Refund Policy */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">Refund Policy</label>
+                            <select
+                                value={refundPolicy}
+                                onChange={(e) => setRefundPolicy(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+                            >
+                                <option value="no_refund">No Refunds</option>
+                                <option value="manual_refund">Manual Refund by Organizer</option>
+                            </select>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* 7. Capacity Section */}
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={hasCapacity}
+                        onChange={(e) => setHasCapacity(e.target.checked)}
+                        className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-fuchsia-500 focus:ring-fuchsia-500"
+                    />
+                    <FaUsers className="text-violet-400" />
+                    <span className="text-sm font-medium text-gray-300">Limit registrations</span>
+                </label>
+
+                {hasCapacity && (
+                    <div className="animate-fadeIn">
+                        <label htmlFor="maxCapacity" className="block text-sm font-medium text-gray-300 mb-1">
+                            Maximum Capacity
+                        </label>
+                        <input
+                            id="maxCapacity"
+                            type="number"
+                            min="1"
+                            value={maxCapacity}
+                            onChange={(e) => setMaxCapacity(e.target.value)}
+                            placeholder="100"
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* 8. Poster Section (AI + Manual) */}
             <div className="flex gap-4 items-end bg-slate-800 p-4 rounded-lg border border-slate-700">
                 <div className="flex-1">
                     <label htmlFor="poster" className="block text-sm font-medium text-gray-300 mb-1">Upload Manual Poster</label>
@@ -201,7 +331,7 @@ function CreateEventForm({ onClose }) {
                 </button>
             </div>
 
-            {/* 7. AI Preview Component */}
+            {/* 9. AI Preview Component */}
             {aiImage && !posterFile && (
                 <AutoPoster 
                     aiBackgroundImage={aiImage}
@@ -216,7 +346,7 @@ function CreateEventForm({ onClose }) {
                 />
             )}
 
-            {/* 8. Success Indicator */}
+            {/* 10. Success Indicator */}
             {posterFile && (
                 <div className="p-3 bg-green-900/30 border border-green-500/50 text-green-400 rounded-md text-sm font-semibold text-center flex items-center justify-center gap-2">
                     ✅ Poster Ready for Submission
@@ -225,7 +355,7 @@ function CreateEventForm({ onClose }) {
 
             <button
                 type="submit" disabled={loading}
-                className="w-full flex justify-center py-3 border border-transparent rounded-md shadow-sm text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 transition"
+                className="w-full flex justify-center py-3 border border-transparent rounded-md shadow-sm text-sm font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 disabled:opacity-50 transition"
             >
                 {loading ? 'Submitting...' : (isCollegeAdmin ? 'Create & Publish Event' : 'Submit for Approval')}
             </button>

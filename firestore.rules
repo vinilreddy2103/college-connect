@@ -1,0 +1,137 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+    
+    function isCollegeAdmin() {
+      return isAuthenticated() && getUserData().role == 'college_admin';
+    }
+    
+    function isEventOrganizer(eventId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+      
+      // User registrations subcollection
+      match /registrations/{eventId} {
+        allow read, write: if isOwner(userId);
+      }
+      
+      // User activities subcollection (for activity timeline)
+      match /activities/{activityId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+      
+      // User notifications subcollection
+      match /notifications/{notificationId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isAuthenticated(); // Any user can create notifications for others (likes, comments, etc.)
+        allow update: if isOwner(userId); // Only owner can mark as read
+      }
+    }
+
+    // Colleges collection
+    match /colleges/{collegeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Events collection
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        isEventOrganizer(eventId) || 
+        isCollegeAdmin() || 
+        isAdmin() ||
+        // Allow like/comment count and registration count updates from authenticated users
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'commentCount', 'registrationCount']))
+      );
+      allow delete: if isCollegeAdmin() || isAdmin();
+      
+      // Event registrations subcollection
+      match /registrations/{userId} {
+        allow read: if isAuthenticated();
+        allow create, delete: if isOwner(userId);
+      }
+      
+      // Event likes subcollection
+      match /likes/{userId} {
+        allow read: if true;
+        allow create, delete: if isOwner(userId);
+      }
+      
+      // Event comments subcollection
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+        allow delete: if isAuthenticated() && (
+          // Comment author can delete their own comments
+          resource.data.userId == request.auth.uid ||
+          // Event organizer can delete any comment on their event
+          isEventOrganizer(eventId) ||
+          // College admin or admin can delete any comment
+          isCollegeAdmin() ||
+          isAdmin()
+        );
+      }
+      
+      // Event payments subcollection
+      match /payments/{paymentId} {
+        allow read: if isAuthenticated() && (
+          // User can read their own payment
+          resource.data.userId == request.auth.uid ||
+          // Event organizer can read all payments
+          isEventOrganizer(eventId) ||
+          // Admin/College admin can read all
+          isCollegeAdmin() ||
+          isAdmin()
+        );
+        // Any authenticated user can create a payment (for their own order)
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow update: if isAuthenticated() && (
+          // User can update their own payment (for completing payment)
+          resource.data.userId == request.auth.uid ||
+          // Organizer/admin can update (for refunds)
+          isEventOrganizer(eventId) ||
+          isCollegeAdmin() ||
+          isAdmin()
+        );
+      }
+    }
+    
+    // User payments subcollection (for payment history)
+    match /users/{userId}/payments/{paymentId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+    }
+  }
+}

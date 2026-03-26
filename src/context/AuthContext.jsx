@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-// Import the new function for listening to registrations
-import { auth, db, onUserRegistrationsChange } from '../firebase';
+// Import the new function for listening to registrations and notifications
+import { auth, db, onUserRegistrationsChange, subscribeToNotifications } from '../firebase';
 
 const AuthContext = createContext();
 
@@ -14,21 +14,26 @@ export default function AuthProvider({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [collegeSettings, setCollegeSettings] = useState({ festMode: false });
-    // --- NEW: State to track registered events ---
+    // --- State to track registered events ---
     const [registeredEvents, setRegisteredEvents] = useState(new Set());
+    // --- Notification state ---
+    const [notifications, setNotifications] = useState([]);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // --- NEW: Placeholder for the registration listener cleanup function ---
+        // Placeholder for listener cleanup functions
         let unsubscribeRegistrations = () => { };
         let unsubscribeCollege = () => { };
+        let unsubscribeNotifications = () => { };
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
             if (user) {
-                // --- NEW: Clean up any previous user's registration listener ---
+                // Clean up any previous user's listeners
                 unsubscribeRegistrations();
                 unsubscribeCollege();
+                unsubscribeNotifications();
 
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -36,9 +41,15 @@ export default function AuthProvider({ children }) {
                     const fetchedUserData = userDocSnap.data();
                     setUserData(fetchedUserData);
 
-                    // --- NEW: Set up a listener for the current user's registrations ---
+                    // Set up a listener for the current user's registrations
                     unsubscribeRegistrations = onUserRegistrationsChange(user.uid, (eventIds) => {
                         setRegisteredEvents(eventIds);
+                    });
+
+                    // Set up a listener for notifications
+                    unsubscribeNotifications = subscribeToNotifications(user.uid, (notifs) => {
+                        setNotifications(notifs);
+                        setUnreadNotificationCount(notifs.filter(n => !n.read).length);
                     });
 
                     if (fetchedUserData.collegeId) {
@@ -53,19 +64,23 @@ export default function AuthProvider({ children }) {
             } else {
                 setUserData(null);
                 setCollegeSettings({ festMode: false });
-                // --- NEW: Clear registrations and clean up listeners on logout ---
+                // Clear registrations and notifications, clean up listeners on logout
                 setRegisteredEvents(new Set());
+                setNotifications([]);
+                setUnreadNotificationCount(0);
                 unsubscribeRegistrations();
                 unsubscribeCollege();
+                unsubscribeNotifications();
             }
             setLoading(false);
         });
 
         return () => {
             unsubscribeAuth();
-            // --- NEW: Ensure all listeners are cleaned up on component unmount ---
+            // Ensure all listeners are cleaned up on component unmount
             unsubscribeRegistrations();
             unsubscribeCollege();
+            unsubscribeNotifications();
         };
     }, []);
 
@@ -73,7 +88,9 @@ export default function AuthProvider({ children }) {
         currentUser,
         userData,
         collegeSettings,
-        registeredEvents, // --- NEW: Provide registered events to the app ---
+        registeredEvents,
+        notifications,
+        unreadNotificationCount,
         loading,
     };
 
