@@ -15,6 +15,7 @@ import CollegeAdminPage from './pages/CollegeAdminPage';
 import AdminRoute from './components/AdminRoute';
 import CollegeAdminRoute from './components/CollegeAdminRoute';
 import ProtectedRoute from './components/ProtectedRoute';
+import FacultyRoute from './components/FacultyRoute';
 import ProfilePage from './pages/ProfilePage';
 import EventDetailsPage from './pages/EventDetailsPage';
 import RegisteredEventsPage from './pages/RegisteredEventsPage';
@@ -23,6 +24,11 @@ import PrivateRoute from './components/PrivateRoute';
 import BrowseEventsPage from './pages/BrowseEventsPage';
 import ActivitiesPage from './pages/ActivitiesPage';
 import PaymentHistoryPage from './pages/PaymentHistoryPage';
+import ClubsPage from './pages/ClubsPage';
+import ClubProfilePage from './pages/ClubProfilePage';
+import FacultyDashboardPage from './pages/FacultyDashboardPage';
+import FestsPage from './pages/FestsPage';
+import FestDetailsPage from './pages/FestDetailsPage';
 
 function App() {
   return (
@@ -62,6 +68,17 @@ function App() {
           
           {/* Payments */}
           <Route path="/payments" element={<ProtectedRoute><PaymentHistoryPage /></ProtectedRoute>} />
+
+          {/* Clubs */}
+          <Route path="/clubs" element={<ProtectedRoute><ClubsPage /></ProtectedRoute>} />
+          <Route path="/club/:clubId" element={<ProtectedRoute><ClubProfilePage /></ProtectedRoute>} />
+
+          {/* Fests */}
+          <Route path="/fests" element={<ProtectedRoute><FestsPage /></ProtectedRoute>} />
+          <Route path="/fest/:festId" element={<ProtectedRoute><FestDetailsPage /></ProtectedRoute>} />
+
+          {/* Faculty Dashboard */}
+          <Route path="/faculty-dashboard" element={<FacultyRoute><FacultyDashboardPage /></FacultyRoute>} />
 
         </Routes>
       </BrowserRouter>

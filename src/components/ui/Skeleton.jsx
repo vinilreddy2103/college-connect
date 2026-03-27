@@ -166,4 +166,41 @@ export const EventDetailsSkeleton = () => (
   </div>
 );
 
+// Club Card Skeleton
+export const ClubCardSkeleton = () => (
+  <div className="card animate-fade-in overflow-hidden">
+    {/* Banner */}
+    <SkeletonBox height="h-24" className="rounded-b-none" />
+    
+    {/* Logo placeholder */}
+    <div className="relative -mt-10 ml-4">
+      <SkeletonBox width="w-20" height="h-20" className="rounded-2xl border-4 border-slate-900" />
+    </div>
+    
+    {/* Content */}
+    <div className="pt-4 pb-4 px-4 space-y-3">
+      {/* Name */}
+      <SkeletonText width="w-3/4" height="h-6" />
+      
+      {/* Category badge */}
+      <SkeletonText width="w-20" height="h-5" className="rounded-full" />
+      
+      {/* Description */}
+      <div className="space-y-2">
+        <SkeletonText width="w-full" />
+        <SkeletonText width="w-2/3" />
+      </div>
+      
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-2">
+        <SkeletonText width="w-24" height="h-4" />
+        <SkeletonText width="w-16" height="h-6" className="rounded-lg" />
+      </div>
+      
+      {/* Button */}
+      <SkeletonText width="w-full" height="h-10" className="rounded-xl" />
+    </div>
+  </div>
+);
+
 export default Skeleton;

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { createEvent, generateAiPoster } from '../firebase';
+import { createEvent, generateAiPoster, submitEventForFest } from '../firebase';
 import { toast } from 'react-toastify';
 import { constructSmartPrompt } from '../utils/aiPromptUtils'; 
 import AutoPoster from './AutoPoster';
-import { FaMagic, FaRupeeSign, FaUsers, FaTicketAlt } from 'react-icons/fa';
+import { FaMagic, FaRupeeSign, FaUsers, FaTicketAlt, FaTrophy } from 'react-icons/fa';
 
-function CreateEventForm({ onClose }) {
+function CreateEventForm({ onClose, festId = null, festName = null, clubId = null, clubName = null }) {
     const { userData } = useAuth();
     
     // --- Original State ---
@@ -31,6 +31,11 @@ function CreateEventForm({ onClose }) {
     const [refundPolicy, setRefundPolicy] = useState('no_refund');
 
     const isCollegeAdmin = userData?.role === 'collegeAdmin';
+    
+    // Check if this is a fest or club event submission
+    const isFestEvent = !!festId;
+    const isClubEvent = !!clubId;
+    const needsApproval = isFestEvent || isClubEvent || !isCollegeAdmin;
 
     const handleFileChange = (e) => {
         if (e.target.files[0]) {
@@ -88,7 +93,7 @@ function CreateEventForm({ onClose }) {
         setLoading(true);
 
         try {
-            const eventStatus = isCollegeAdmin ? 'approved' : 'pending';
+            const eventStatus = needsApproval ? 'pending' : 'approved';
             const eventData = {
                 title,
                 description,
@@ -110,12 +115,21 @@ function CreateEventForm({ onClose }) {
                 registrationCount: 0,
                 // Refund policy
                 refundPolicy: isPaid ? refundPolicy : null,
+                // Fest/Club association
+                festId: festId || null,
+                festName: festName || null,
+                clubId: clubId || null,
+                clubName: clubName || null,
             };
 
             // posterFile will be either the manual File OR the Blob from AutoPoster
             await createEvent(eventData, posterFile);
 
-            if (isCollegeAdmin) {
+            if (isFestEvent) {
+                toast.success("Event submitted for fest approval!");
+            } else if (isClubEvent) {
+                toast.success("Event submitted for club coordinator approval!");
+            } else if (isCollegeAdmin) {
                 toast.success("Event created and published successfully!");
             } else {
                 toast.success("Event submitted for approval!");
@@ -133,6 +147,21 @@ function CreateEventForm({ onClose }) {
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             
+            {/* Fest/Club Banner */}
+            {(isFestEvent || isClubEvent) && (
+                <div className={`p-4 rounded-xl border ${isFestEvent ? 'bg-amber-500/10 border-amber-500/30' : 'bg-purple-500/10 border-purple-500/30'}`}>
+                    <div className="flex items-center gap-2">
+                        <FaTrophy className={isFestEvent ? 'text-amber-400' : 'text-purple-400'} />
+                        <span className="text-sm text-gray-300">
+                            Submitting event for: <strong className="text-white">{festName || clubName}</strong>
+                        </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                        This event will require approval before being published.
+                    </p>
+                </div>
+            )}
+
             {/* 1. Event Title */}
             <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-300">Event Title</label>

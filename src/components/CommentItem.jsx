@@ -13,7 +13,7 @@ function CommentItem({ comment, eventId, eventOrganizerId, eventTitle = '', even
     const [isDeleting, setIsDeleting] = useState(false);
 
     const isAuthor = currentUser?.uid === comment.userId;
-    const isAdmin = userData?.role === 'admin' || userData?.role === 'college_admin';
+    const isAdmin = userData?.role === 'admin' || userData?.role === 'collegeAdmin';
     const isOrganizer = currentUser?.uid === eventOrganizerId;
     const canDelete = isAuthor || isAdmin || isOrganizer;
     const canEdit = isAuthor;

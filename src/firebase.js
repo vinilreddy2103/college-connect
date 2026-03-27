@@ -34,6 +34,8 @@ import {
     runTransaction,
     limit,
     startAfter,
+    arrayUnion,
+    arrayRemove,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { v4 as uuidv4 } from 'uuid';
@@ -250,6 +252,14 @@ export const uploadProfileImage = async (file, userId) => {
     return photoURL;
 };
 
+// Generic image upload function
+export const uploadImage = async (file, path) => {
+    const fileRef = ref(storage, path);
+    await uploadBytes(fileRef, file);
+    const photoURL = await getDownloadURL(fileRef);
+    return photoURL;
+};
+
 export const uploadEventPoster = async (file, eventId) => {
     const filePath = `event-posters/${eventId}/${file.name}`;
     const fileRef = ref(storage, filePath);
@@ -324,11 +334,491 @@ export const updateEventStatus = async (eventId, status) => {
     try {
         const eventRef = doc(db, "events", eventId);
         await updateDoc(eventRef, {
-            status: status
+            status: status,
+            updatedAt: serverTimestamp()
         });
     } catch (error) {
         console.error("Error updating event status:", error);
         throw error;
+    }
+};
+
+// Delete event (college admin function)
+export const deleteEvent = async (eventId) => {
+    try {
+        const eventRef = doc(db, 'events', eventId);
+        await deleteDoc(eventRef);
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting event:', error);
+        throw error;
+    }
+};
+
+// Update event details (college admin function)
+export const updateEvent = async (eventId, eventData) => {
+    try {
+        const eventRef = doc(db, 'events', eventId);
+        await updateDoc(eventRef, {
+            ...eventData,
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating event:', error);
+        throw error;
+    }
+};
+
+// Update club status (college admin function)
+export const updateClubStatus = async (clubId, status) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        await updateDoc(clubRef, {
+            status,
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating club status:', error);
+        throw error;
+    }
+};
+
+// Assign faculty coordinator to club (college admin function)
+export const assignFacultyToClub = async (clubId, facultyId) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        await updateDoc(clubRef, {
+            facultyCoordinatorId: facultyId,
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error assigning faculty to club:', error);
+        throw error;
+    }
+};
+
+// ========== FEST MANAGEMENT FUNCTIONS ==========
+
+// Create a new fest
+export const createFest = async (festData) => {
+    try {
+        const festRef = await addDoc(collection(db, 'fests'), {
+            ...festData,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        return { success: true, id: festRef.id };
+    } catch (error) {
+        console.error('Error creating fest:', error);
+        throw error;
+    }
+};
+
+// Get all fests for a college
+export const getFestsByCollege = async (collegeId) => {
+    try {
+        const festsRef = collection(db, 'fests');
+        const q = query(festsRef, where('collegeId', '==', collegeId), orderBy('startDate', 'desc'));
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            startDate: doc.data().startDate?.toDate(),
+            endDate: doc.data().endDate?.toDate(),
+            createdAt: doc.data().createdAt?.toDate()
+        }));
+    } catch (error) {
+        console.error('Error getting fests:', error);
+        throw error;
+    }
+};
+
+// Update fest
+export const updateFest = async (festId, updateData) => {
+    try {
+        const festRef = doc(db, 'fests', festId);
+        await updateDoc(festRef, {
+            ...updateData,
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating fest:', error);
+        throw error;
+    }
+};
+
+// Delete fest
+export const deleteFest = async (festId) => {
+    try {
+        const festRef = doc(db, 'fests', festId);
+        await deleteDoc(festRef);
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting fest:', error);
+        throw error;
+    }
+};
+
+// Add coordinator to fest
+export const addCoordinatorToFest = async (festId, coordinatorId, coordinatorType) => {
+    try {
+        const festRef = doc(db, 'fests', festId);
+        const field = coordinatorType === 'faculty' ? 'facultyCoordinators' : 'studentCoordinators';
+        
+        await updateDoc(festRef, {
+            [field]: arrayUnion(coordinatorId),
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error adding coordinator:', error);
+        throw error;
+    }
+};
+
+// Remove coordinator from fest
+export const removeCoordinatorFromFest = async (festId, coordinatorId, coordinatorType) => {
+    try {
+        const festRef = doc(db, 'fests', festId);
+        const field = coordinatorType === 'faculty' ? 'facultyCoordinators' : 'studentCoordinators';
+        
+        await updateDoc(festRef, {
+            [field]: arrayRemove(coordinatorId),
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error removing coordinator:', error);
+        throw error;
+    }
+};
+
+// --- FEST FUNCTIONS FOR STUDENTS & FACULTY ---
+
+// Get fests visible to a student (filtered by college and branch)
+export const getFestsForStudent = async (collegeId, userBranch) => {
+    try {
+        const festsRef = collection(db, 'fests');
+        // Get all fests for this college + fests allowing other colleges
+        const q = query(festsRef, where('collegeId', '==', collegeId), orderBy('startDate', 'desc'));
+        const snapshot = await getDocs(q);
+        
+        const fests = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            startDate: doc.data().startDate?.toDate(),
+            endDate: doc.data().endDate?.toDate(),
+            createdAt: doc.data().createdAt?.toDate()
+        }));
+        
+        // Filter by branch visibility
+        return fests.filter(fest => {
+            // College-wide fests are visible to all
+            if (fest.scope === 'college') return true;
+            // Branch-specific fests only visible to matching branch
+            if (fest.scope === 'branch' && fest.branchName) {
+                return fest.branchName === userBranch;
+            }
+            return true;
+        });
+    } catch (error) {
+        console.error('Error getting fests for student:', error);
+        throw error;
+    }
+};
+
+// Get a single fest by ID
+export const getFestById = async (festId) => {
+    try {
+        const festRef = doc(db, 'fests', festId);
+        const snapshot = await getDoc(festRef);
+        if (snapshot.exists()) {
+            const data = snapshot.data();
+            return {
+                id: snapshot.id,
+                ...data,
+                startDate: data.startDate?.toDate(),
+                endDate: data.endDate?.toDate(),
+                createdAt: data.createdAt?.toDate()
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Error getting fest:', error);
+        throw error;
+    }
+};
+
+// Get events linked to a fest
+export const getFestEvents = async (festId, includeAll = false) => {
+    try {
+        const eventsRef = collection(db, 'events');
+        let q;
+        if (includeAll) {
+            // For coordinators - show all including pending
+            q = query(eventsRef, where('festId', '==', festId), orderBy('date', 'asc'));
+        } else {
+            // For students - only approved events
+            q = query(eventsRef, where('festId', '==', festId), where('status', '==', 'approved'), orderBy('date', 'asc'));
+        }
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            let eventDate = data.date;
+            if (eventDate?.toDate) {
+                eventDate = eventDate.toDate();
+            } else if (eventDate) {
+                eventDate = new Date(eventDate);
+            }
+            return {
+                id: doc.id,
+                ...data,
+                date: eventDate,
+                createdAt: data.createdAt?.toDate?.() || data.createdAt
+            };
+        });
+    } catch (error) {
+        console.error('Error getting fest events:', error);
+        throw error;
+    }
+};
+
+// Submit an event for a fest (creates pending event)
+export const submitEventForFest = async (eventData, festId, festName) => {
+    try {
+        const eventsRef = collection(db, 'events');
+        const newEvent = {
+            ...eventData,
+            festId,
+            festName,
+            status: 'pending', // Requires approval
+            createdAt: serverTimestamp()
+        };
+        const docRef = await addDoc(eventsRef, newEvent);
+        return { id: docRef.id, ...newEvent };
+    } catch (error) {
+        console.error('Error submitting event for fest:', error);
+        throw error;
+    }
+};
+
+// Get fests where user is a coordinator (faculty or student)
+export const getFacultyFests = async (userId) => {
+    try {
+        const festsRef = collection(db, 'fests');
+        // Check faculty coordinators
+        const facultyQuery = query(festsRef, where('facultyCoordinators', 'array-contains', userId));
+        const facultySnapshot = await getDocs(facultyQuery);
+        
+        // Check student coordinators
+        const studentQuery = query(festsRef, where('studentCoordinators', 'array-contains', userId));
+        const studentSnapshot = await getDocs(studentQuery);
+        
+        // Combine and dedupe
+        const festsMap = new Map();
+        
+        [...facultySnapshot.docs, ...studentSnapshot.docs].forEach(doc => {
+            if (!festsMap.has(doc.id)) {
+                const data = doc.data();
+                festsMap.set(doc.id, {
+                    id: doc.id,
+                    ...data,
+                    startDate: data.startDate?.toDate(),
+                    endDate: data.endDate?.toDate(),
+                    createdAt: data.createdAt?.toDate()
+                });
+            }
+        });
+        
+        return Array.from(festsMap.values());
+    } catch (error) {
+        console.error('Error getting faculty fests:', error);
+        throw error;
+    }
+};
+
+// Get pending events for a fest (for coordinators to approve)
+export const getPendingFestEvents = async (festId) => {
+    try {
+        const eventsRef = collection(db, 'events');
+        const q = query(
+            eventsRef, 
+            where('festId', '==', festId), 
+            where('status', '==', 'pending'),
+            orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            date: doc.data().date?.toDate(),
+            createdAt: doc.data().createdAt?.toDate()
+        }));
+    } catch (error) {
+        console.error('Error getting pending fest events:', error);
+        throw error;
+    }
+};
+
+// Get pending club events (for club coordinator approval)
+export const getPendingClubEvents = async (clubId) => {
+    try {
+        const eventsRef = collection(db, 'events');
+        const q = query(
+            eventsRef, 
+            where('clubId', '==', clubId), 
+            where('status', '==', 'pending'),
+            orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            let eventDate = data.date;
+            if (eventDate?.toDate) {
+                eventDate = eventDate.toDate();
+            } else if (eventDate) {
+                eventDate = new Date(eventDate);
+            }
+            return {
+                id: doc.id,
+                ...data,
+                date: eventDate,
+                createdAt: data.createdAt?.toDate?.() || data.createdAt
+            };
+        });
+    } catch (error) {
+        console.error('Error getting pending club events:', error);
+        throw error;
+    }
+};
+
+// Approve a fest/club event submission
+export const approveFestEvent = async (eventId) => {
+    try {
+        const eventRef = doc(db, 'events', eventId);
+        
+        // Get event data first to send notification
+        const eventSnap = await getDoc(eventRef);
+        if (!eventSnap.exists()) {
+            throw new Error('Event not found');
+        }
+        const eventData = eventSnap.data();
+        
+        await updateDoc(eventRef, {
+            status: 'approved',
+            approvedAt: serverTimestamp()
+        });
+        
+        // Send notification to event organizer
+        const organizerId = eventData.organizerId || eventData.createdBy;
+        if (organizerId) {
+            const contextName = eventData.festName || eventData.clubName || '';
+            try {
+                await createNotification(organizerId, {
+                    type: 'event_approved',
+                    title: 'Event Approved! 🎉',
+                    message: `Your event "${eventData.title}"${contextName ? ` for ${contextName}` : ''} has been approved and is now live!`,
+                    eventId: eventId,
+                    eventTitle: eventData.title,
+                    link: `/event/${eventId}`
+                });
+            } catch (notifError) {
+                console.error('Failed to send approval notification:', notifError);
+            }
+        } else {
+            console.warn('No organizerId found for event:', eventId);
+        }
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error approving fest event:', error);
+        throw error;
+    }
+};
+
+// Reject a fest/club event submission
+export const rejectFestEvent = async (eventId, reason = '') => {
+    try {
+        const eventRef = doc(db, 'events', eventId);
+        
+        // Get event data first to send notification
+        const eventSnap = await getDoc(eventRef);
+        if (!eventSnap.exists()) {
+            throw new Error('Event not found');
+        }
+        const eventData = eventSnap.data();
+        
+        await updateDoc(eventRef, {
+            status: 'rejected',
+            rejectionReason: reason,
+            rejectedAt: serverTimestamp()
+        });
+        
+        // Send notification to event organizer
+        const organizerId = eventData.organizerId || eventData.createdBy;
+        if (organizerId) {
+            const contextName = eventData.festName || eventData.clubName || '';
+            try {
+                await createNotification(organizerId, {
+                    type: 'event_rejected',
+                    title: 'Event Not Approved',
+                    message: `Your event "${eventData.title}"${contextName ? ` for ${contextName}` : ''} was not approved.${reason ? ` Reason: ${reason}` : ''}`,
+                    eventId: eventId,
+                    eventTitle: eventData.title,
+                    link: `/event/${eventId}`
+                });
+            } catch (notifError) {
+                console.error('Failed to send rejection notification:', notifError);
+            }
+        } else {
+            console.warn('No organizerId found for event:', eventId);
+        }
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error rejecting fest event:', error);
+        throw error;
+    }
+};
+
+// Get fest stats for coordinator dashboard
+export const getFestStats = async (festId) => {
+    try {
+        // Get all events for this fest
+        const eventsRef = collection(db, 'events');
+        const eventsQuery = query(eventsRef, where('festId', '==', festId));
+        const eventsSnapshot = await getDocs(eventsQuery);
+        
+        let totalEvents = 0;
+        let pendingEvents = 0;
+        let approvedEvents = 0;
+        let totalRegistrations = 0;
+        
+        for (const eventDoc of eventsSnapshot.docs) {
+            totalEvents++;
+            const data = eventDoc.data();
+            if (data.status === 'pending') pendingEvents++;
+            if (data.status === 'approved') approvedEvents++;
+            totalRegistrations += data.registrationCount || 0;
+        }
+        
+        return {
+            totalEvents,
+            pendingEvents,
+            approvedEvents,
+            totalRegistrations
+        };
+    } catch (error) {
+        console.error('Error getting fest stats:', error);
+        return { totalEvents: 0, pendingEvents: 0, approvedEvents: 0, totalRegistrations: 0 };
     }
 };
 
@@ -851,6 +1341,96 @@ export const getAllColleges = async () => {
     } catch (error) {
         console.error("Error getting colleges:", error);
         return [];
+    }
+};
+
+// Get a single college by ID
+export const getCollegeById = async (collegeId) => {
+    try {
+        const collegeRef = doc(db, 'colleges', collegeId);
+        const snapshot = await getDoc(collegeRef);
+        if (snapshot.exists()) {
+            return { id: snapshot.id, ...snapshot.data() };
+        }
+        return null;
+    } catch (error) {
+        console.error("Error getting college:", error);
+        return null;
+    }
+};
+
+// Get a single user by ID
+export const getUserById = async (userId) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const snapshot = await getDoc(userRef);
+        if (snapshot.exists()) {
+            return { id: snapshot.id, ...snapshot.data() };
+        }
+        return null;
+    } catch (error) {
+        console.error("Error getting user:", error);
+        return null;
+    }
+};
+
+// Get all users from a specific college
+export const getUsersByCollege = async (collegeId, filters = {}) => {
+    try {
+        const usersRef = collection(db, 'users');
+        const constraints = [where('collegeId', '==', collegeId)];
+        
+        // Apply role filter if provided
+        if (filters.role && filters.role !== 'all') {
+            constraints.push(where('role', '==', filters.role));
+        }
+        
+        const q = query(usersRef, ...constraints);
+        const snapshot = await getDocs(q);
+        
+        let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Client-side filtering for search
+        if (filters.search) {
+            const searchLower = filters.search.toLowerCase();
+            users = users.filter(u => 
+                u.displayName?.toLowerCase().includes(searchLower) ||
+                u.email?.toLowerCase().includes(searchLower)
+            );
+        }
+        
+        return users;
+    } catch (error) {
+        console.error('Error getting users by college:', error);
+        throw error;
+    }
+};
+
+// Assign role to a user (college admin function)
+export const assignUserRole = async (userId, newRole, collegeId) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+        
+        if (!userDoc.exists()) {
+            throw new Error('User not found');
+        }
+        
+        // Verify user belongs to the college
+        if (userDoc.data().collegeId !== collegeId) {
+            throw new Error('User does not belong to this college');
+        }
+        
+        // Update the role
+        await updateDoc(userRef, {
+            role: newRole,
+            updatedAt: serverTimestamp()
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error assigning user role:', error);
+        throw error;
     }
 };
 
@@ -1421,5 +2001,942 @@ export const notifyEventCancelled = async (eventId, eventTitle, reason = '') => 
         });
     } catch (error) {
         console.error('Error notifying event cancellation:', error);
+    }
+};
+
+// ============================================
+// CLUBS FUNCTIONS
+// ============================================
+
+// Club categories
+export const CLUB_CATEGORIES = [
+    { value: 'technical', label: 'Technical' },
+    { value: 'cultural', label: 'Cultural' },
+    { value: 'sports', label: 'Sports' },
+    { value: 'social', label: 'Social' },
+    { value: 'literary', label: 'Literary' },
+    { value: 'other', label: 'Other' },
+];
+
+// Upload club logo
+export const uploadClubLogo = async (file, clubId) => {
+    const filePath = `club-logos/${clubId}/${file.name}`;
+    const fileRef = ref(storage, filePath);
+    await uploadBytes(fileRef, file);
+    return await getDownloadURL(fileRef);
+};
+
+// Upload club banner
+export const uploadClubBanner = async (file, clubId) => {
+    const filePath = `club-banners/${clubId}/${file.name}`;
+    const fileRef = ref(storage, filePath);
+    await uploadBytes(fileRef, file);
+    return await getDownloadURL(fileRef);
+};
+
+// Create a new club
+export const createClub = async (clubData, logoFile, bannerFile) => {
+    const clubId = uuidv4();
+    
+    try {
+        let logoURL = '';
+        let bannerURL = '';
+        
+        if (logoFile) {
+            logoURL = await uploadClubLogo(logoFile, clubId);
+        }
+        if (bannerFile) {
+            bannerURL = await uploadClubBanner(bannerFile, clubId);
+        }
+        
+        const finalClubData = {
+            ...clubData,
+            id: clubId,
+            logoURL,
+            bannerURL,
+            memberCount: 0,
+            status: 'active',
+            createdAt: serverTimestamp(),
+        };
+        
+        await setDoc(doc(db, 'clubs', clubId), finalClubData);
+        
+        // Add creator as first member (if they're faculty coordinator or leader)
+        if (clubData.facultyCoordinatorId) {
+            await setDoc(doc(db, 'clubs', clubId, 'members', clubData.facultyCoordinatorId), {
+                userId: clubData.facultyCoordinatorId,
+                displayName: clubData.facultyCoordinatorName,
+                email: clubData.facultyCoordinatorEmail,
+                role: 'coordinator',
+                joinedAt: serverTimestamp(),
+            });
+        }
+        
+        if (clubData.leaderId) {
+            await setDoc(doc(db, 'clubs', clubId, 'members', clubData.leaderId), {
+                userId: clubData.leaderId,
+                displayName: clubData.leaderName,
+                email: clubData.leaderEmail,
+                role: 'leader',
+                joinedAt: serverTimestamp(),
+            });
+            
+            // Add to leader's clubs
+            await setDoc(doc(db, 'users', clubData.leaderId, 'clubs', clubId), {
+                clubId,
+                clubName: clubData.name,
+                role: 'leader',
+                joinedAt: serverTimestamp(),
+            });
+        }
+        
+        return clubId;
+    } catch (error) {
+        console.error('Error creating club:', error);
+        throw error;
+    }
+};
+
+// Update club details
+export const updateClub = async (clubId, updates, logoFile, bannerFile) => {
+    try {
+        const updateData = { ...updates };
+        
+        if (logoFile) {
+            updateData.logoURL = await uploadClubLogo(logoFile, clubId);
+        }
+        if (bannerFile) {
+            updateData.bannerURL = await uploadClubBanner(bannerFile, clubId);
+        }
+        
+        await updateDoc(doc(db, 'clubs', clubId), updateData);
+    } catch (error) {
+        console.error('Error updating club:', error);
+        throw error;
+    }
+};
+
+// Get all clubs for a college
+export const getClubsByCollege = async (collegeId, filters = {}) => {
+    try {
+        const clubsRef = collection(db, 'clubs');
+        const constraints = [
+            where('collegeId', '==', collegeId),
+            where('status', '==', 'active'),
+        ];
+        
+        if (filters.category && filters.category !== 'all') {
+            constraints.push(where('category', '==', filters.category));
+        }
+        
+        // Only use Firestore filter for paid (isPaid == true)
+        // Free filter is done client-side since documents without isPaid field won't match
+        if (filters.priceFilter === 'paid') {
+            constraints.push(where('isPaid', '==', true));
+        }
+        
+        constraints.push(orderBy('memberCount', 'desc'));
+        
+        const q = query(clubsRef, ...constraints);
+        const snapshot = await getDocs(q);
+        
+        let clubs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Client-side filter for free (to include clubs without isPaid field)
+        if (filters.priceFilter === 'free') {
+            clubs = clubs.filter(c => !c.isPaid);
+        }
+        
+        return clubs;
+    } catch (error) {
+        console.error('Error getting clubs:', error);
+        throw error;
+    }
+};
+
+// Get single club by ID
+export const getClubById = async (clubId) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        
+        if (!clubSnap.exists()) {
+            return null;
+        }
+        
+        return { id: clubSnap.id, ...clubSnap.data() };
+    } catch (error) {
+        console.error('Error getting club:', error);
+        throw error;
+    }
+};
+
+// Join a free club
+export const joinClub = async (clubId, userId, userName, userEmail, userPhoto) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        
+        if (!clubSnap.exists()) {
+            throw new Error('Club not found');
+        }
+        
+        const club = clubSnap.data();
+        
+        if (club.isPaid) {
+            throw new Error('This is a paid club. Use joinPaidClub instead.');
+        }
+        
+        // Check if club requires approval
+        if (club.requiresApproval) {
+            // Check if already has pending request
+            const hasPending = await checkPendingJoinRequest(clubId, userId);
+            if (hasPending) {
+                throw new Error('You already have a pending join request for this club.');
+            }
+            
+            // Create join request instead of directly joining
+            await requestToJoinClub(clubId, userId, {
+                name: userName,
+                displayName: userName,
+                email: userEmail,
+                photoURL: userPhoto
+            });
+            
+            return { requiresApproval: true };
+        }
+        
+        const batch = writeBatch(db);
+        
+        // Add to club members
+        batch.set(doc(db, 'clubs', clubId, 'members', userId), {
+            userId,
+            displayName: userName,
+            email: userEmail,
+            photoURL: userPhoto || '',
+            role: 'member',
+            joinedAt: serverTimestamp(),
+        });
+        
+        // Add to user's clubs
+        batch.set(doc(db, 'users', userId, 'clubs', clubId), {
+            clubId,
+            clubName: club.name,
+            role: 'member',
+            joinedAt: serverTimestamp(),
+        });
+        
+        // Increment member count
+        batch.update(clubRef, { memberCount: increment(1) });
+        
+        await batch.commit();
+        
+        // Log activity
+        await logActivity(userId, {
+            type: 'join_club',
+            clubId,
+            clubName: club.name,
+            message: `Joined ${club.name}`,
+        });
+        
+        return { requiresApproval: false };
+        
+    } catch (error) {
+        console.error('Error joining club:', error);
+        throw error;
+    }
+};
+
+// Create payment order for paid club
+export const createClubPaymentOrder = async (clubId, userId, userEmail, userName) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        
+        if (!clubSnap.exists()) {
+            throw new Error('Club not found');
+        }
+        
+        const club = clubSnap.data();
+        
+        if (!club.isPaid) {
+            throw new Error('This is a free club');
+        }
+        
+        // Check if already a member
+        const memberRef = doc(db, 'clubs', clubId, 'members', userId);
+        const memberSnap = await getDoc(memberRef);
+        
+        if (memberSnap.exists()) {
+            throw new Error('Already a member of this club');
+        }
+        
+        const paymentId = uuidv4();
+        const paymentData = {
+            id: paymentId,
+            clubId,
+            clubName: club.name,
+            userId,
+            userEmail,
+            userName,
+            amount: club.membershipFee,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+        };
+        
+        // Store in club's payments and user's payments
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'clubs', clubId, 'payments', paymentId), paymentData);
+        batch.set(doc(db, 'users', userId, 'payments', paymentId), {
+            ...paymentData,
+            type: 'club_membership',
+        });
+        await batch.commit();
+        
+        return {
+            paymentId,
+            amount: club.membershipFee,
+            clubName: club.name,
+            clubId,
+            currency: 'INR',
+            prefill: { email: userEmail, name: userName },
+        };
+    } catch (error) {
+        console.error('Error creating club payment order:', error);
+        throw error;
+    }
+};
+
+// Verify club membership payment and add member
+export const verifyClubPayment = async (paymentId, clubId, userId, razorpayPaymentId, razorpayOrderId, razorpaySignature) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        
+        if (!clubSnap.exists()) {
+            throw new Error('Club not found');
+        }
+        
+        const club = clubSnap.data();
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+        
+        const batch = writeBatch(db);
+        
+        // Update payment status
+        const paymentUpdate = {
+            status: 'success',
+            razorpayPaymentId,
+            razorpayOrderId: razorpayOrderId || null,
+            razorpaySignature: razorpaySignature || null,
+            completedAt: serverTimestamp(),
+        };
+        
+        batch.update(doc(db, 'clubs', clubId, 'payments', paymentId), paymentUpdate);
+        batch.update(doc(db, 'users', userId, 'payments', paymentId), paymentUpdate);
+        
+        // Add to club members
+        batch.set(doc(db, 'clubs', clubId, 'members', userId), {
+            userId,
+            displayName: userData.displayName || 'Anonymous',
+            email: userData.email,
+            photoURL: userData.photoURL || '',
+            role: 'member',
+            joinedAt: serverTimestamp(),
+            paymentId,
+            paidAmount: club.membershipFee,
+        });
+        
+        // Add to user's clubs
+        batch.set(doc(db, 'users', userId, 'clubs', clubId), {
+            clubId,
+            clubName: club.name,
+            role: 'member',
+            joinedAt: serverTimestamp(),
+            paymentId,
+        });
+        
+        // Increment member count
+        batch.update(clubRef, { memberCount: increment(1) });
+        
+        await batch.commit();
+        
+        // Log activity
+        await logActivity(userId, {
+            type: 'join_club',
+            clubId,
+            clubName: club.name,
+            amount: club.membershipFee,
+            message: `Paid ₹${club.membershipFee / 100} and joined ${club.name}`,
+        });
+        
+        // Send notification
+        await createNotification(userId, {
+            type: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+            title: 'Club Membership Confirmed',
+            message: `You are now a member of ${club.name}`,
+            clubId,
+            clubName: club.name,
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error verifying club payment:', error);
+        throw error;
+    }
+};
+
+// Leave a club
+export const leaveClub = async (clubId, userId) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        
+        if (!clubSnap.exists()) {
+            throw new Error('Club not found');
+        }
+        
+        const club = clubSnap.data();
+        
+        // Can't leave if you're the leader or coordinator
+        if (club.leaderId === userId || club.facultyCoordinatorId === userId) {
+            throw new Error('Leaders and coordinators cannot leave. Transfer leadership first.');
+        }
+        
+        const batch = writeBatch(db);
+        
+        // Remove from club members
+        batch.delete(doc(db, 'clubs', clubId, 'members', userId));
+        
+        // Remove from user's clubs
+        batch.delete(doc(db, 'users', userId, 'clubs', clubId));
+        
+        // Decrement member count
+        batch.update(clubRef, { memberCount: increment(-1) });
+        
+        await batch.commit();
+        
+        // Log activity
+        await logActivity(userId, {
+            type: 'leave_club',
+            clubId,
+            clubName: club.name,
+            message: `Left ${club.name}`,
+        });
+        
+    } catch (error) {
+        console.error('Error leaving club:', error);
+        throw error;
+    }
+};
+
+// Remove a member from club (coordinator action)
+export const removeClubMember = async (clubId, memberId, removedByName) => {
+    try {
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        
+        if (!clubSnap.exists()) {
+            throw new Error('Club not found');
+        }
+        
+        const club = clubSnap.data();
+        
+        // Can't remove leader or coordinator
+        if (club.leaderId === memberId || club.facultyCoordinatorId === memberId) {
+            throw new Error('Cannot remove leaders or coordinators');
+        }
+        
+        const batch = writeBatch(db);
+        
+        // Remove from club members
+        batch.delete(doc(db, 'clubs', clubId, 'members', memberId));
+        
+        // Remove from user's clubs
+        batch.delete(doc(db, 'users', memberId, 'clubs', clubId));
+        
+        // Decrement member count
+        batch.update(clubRef, { memberCount: increment(-1) });
+        
+        await batch.commit();
+        
+        // Notify the removed member
+        await createNotification(memberId, {
+            type: 'club_removed',
+            title: 'Removed from Club',
+            message: `You have been removed from ${club.name} by ${removedByName}.`,
+            clubId,
+            clubName: club.name,
+            link: `/clubs`
+        });
+        
+    } catch (error) {
+        console.error('Error removing club member:', error);
+        throw error;
+    }
+};
+
+// Get club members
+export const getClubMembers = async (clubId, lastDoc = null, pageSize = 20) => {
+    try {
+        const membersRef = collection(db, 'clubs', clubId, 'members');
+        const constraints = [orderBy('joinedAt', 'desc'), limit(pageSize)];
+        
+        if (lastDoc) {
+            constraints.push(startAfter(lastDoc));
+        }
+        
+        const q = query(membersRef, ...constraints);
+        const snapshot = await getDocs(q);
+        
+        const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const lastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
+        
+        return { members, lastVisible, hasMore: snapshot.docs.length === pageSize };
+    } catch (error) {
+        console.error('Error getting club members:', error);
+        throw error;
+    }
+};
+
+// Get user's clubs
+export const getUserClubs = async (userId) => {
+    try {
+        const userClubsRef = collection(db, 'users', userId, 'clubs');
+        const snapshot = await getDocs(userClubsRef);
+        
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error getting user clubs:', error);
+        throw error;
+    }
+};
+
+// Check if user is member of a club
+export const checkClubMembership = async (clubId, userId) => {
+    try {
+        const memberRef = doc(db, 'clubs', clubId, 'members', userId);
+        const memberSnap = await getDoc(memberRef);
+        
+        if (!memberSnap.exists()) {
+            return null;
+        }
+        
+        return memberSnap.data();
+    } catch (error) {
+        console.error('Error checking club membership:', error);
+        return null;
+    }
+};
+
+// Real-time listener for user's club memberships
+export const onUserClubsChange = (userId, callback) => {
+    const userClubsRef = collection(db, 'users', userId, 'clubs');
+    
+    return onSnapshot(userClubsRef, (snapshot) => {
+        const clubs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(clubs);
+    });
+};
+
+// Search clubs by name
+export const searchClubs = async (searchTerm, collegeId) => {
+    try {
+        // Get all clubs for the college and filter client-side
+        const clubsRef = collection(db, 'clubs');
+        const q = query(
+            clubsRef,
+            where('collegeId', '==', collegeId),
+            where('status', '==', 'active')
+        );
+        
+        const snapshot = await getDocs(q);
+        const clubs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Client-side search
+        const searchLower = searchTerm.toLowerCase();
+        return clubs.filter(club => 
+            club.name.toLowerCase().includes(searchLower) ||
+            club.description?.toLowerCase().includes(searchLower) ||
+            club.tags?.some(tag => tag.toLowerCase().includes(searchLower))
+        );
+    } catch (error) {
+        console.error('Error searching clubs:', error);
+        throw error;
+    }
+};
+
+// Get events by club
+export const getClubEvents = async (clubId) => {
+    try {
+        const eventsRef = collection(db, 'events');
+        const todayString = new Date().toISOString().split('T')[0];
+        
+        const q = query(
+            eventsRef,
+            where('clubId', '==', clubId),
+            where('status', '==', 'approved'),
+            where('date', '>=', todayString),
+            orderBy('date', 'asc')
+        );
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error getting club events:', error);
+        throw error;
+    }
+};
+
+// Format membership fee
+export const formatMembershipFee = (paisa) => {
+    if (!paisa || paisa === 0) return 'Free';
+    return `₹${paisa / 100}`;
+};
+
+// ============================================
+// FACULTY DASHBOARD FUNCTIONS
+// ============================================
+
+// Request to join a club (for approval-required clubs)
+export const requestToJoinClub = async (clubId, userId, userData) => {
+    try {
+        const requestRef = doc(db, 'clubs', clubId, 'joinRequests', uuidv4());
+        
+        await setDoc(requestRef, {
+            userId,
+            userName: userData.name || userData.displayName || 'Unknown',
+            userEmail: userData.email,
+            userPhotoURL: userData.photoURL || null,
+            status: 'pending',
+            requestedAt: serverTimestamp(),
+            processedAt: null,
+            processedBy: null
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error requesting to join club:', error);
+        throw error;
+    }
+};
+
+// Check if user has a pending join request for a club
+export const checkPendingJoinRequest = async (clubId, userId) => {
+    try {
+        const requestsRef = collection(db, 'clubs', clubId, 'joinRequests');
+        const q = query(
+            requestsRef,
+            where('userId', '==', userId),
+            where('status', '==', 'pending')
+        );
+        
+        const snapshot = await getDocs(q);
+        return !snapshot.empty;
+    } catch (error) {
+        console.error('Error checking pending request:', error);
+        return false;
+    }
+};
+
+// Get pending join requests for a club
+export const getPendingJoinRequests = async (clubId) => {
+    try {
+        const requestsRef = collection(db, 'clubs', clubId, 'joinRequests');
+        const q = query(
+            requestsRef,
+            where('status', '==', 'pending'),
+            orderBy('requestedAt', 'asc')
+        );
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, clubId, ...doc.data() }));
+    } catch (error) {
+        console.error('Error getting pending requests:', error);
+        throw error;
+    }
+};
+
+// Approve join request
+export const approveJoinRequest = async (clubId, requestId, approverUserId) => {
+    try {
+        // Get the request first
+        const requestRef = doc(db, 'clubs', clubId, 'joinRequests', requestId);
+        const requestSnap = await getDoc(requestRef);
+        
+        if (!requestSnap.exists()) {
+            throw new Error('Join request not found');
+        }
+        
+        const requestData = requestSnap.data();
+        const userId = requestData.userId;
+        
+        // Get club data
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        const clubData = clubSnap.data();
+        
+        // Start batch write
+        const batch = writeBatch(db);
+        
+        // Update request status
+        batch.update(requestRef, {
+            status: 'approved',
+            processedAt: serverTimestamp(),
+            processedBy: approverUserId
+        });
+        
+        // Add user to club members
+        const memberRef = doc(db, 'clubs', clubId, 'members', userId);
+        batch.set(memberRef, {
+            userId,
+            userName: requestData.userName,
+            userEmail: requestData.userEmail,
+            userPhotoURL: requestData.userPhotoURL,
+            role: 'member',
+            joinedAt: serverTimestamp()
+        });
+        
+        // Add club to user's clubs
+        const userClubRef = doc(db, 'users', userId, 'clubs', clubId);
+        batch.set(userClubRef, {
+            clubId,
+            clubName: clubData.name,
+            clubLogoURL: clubData.logoURL || null,
+            role: 'member',
+            joinedAt: serverTimestamp()
+        });
+        
+        // Increment member count
+        batch.update(clubRef, {
+            memberCount: increment(1)
+        });
+        
+        await batch.commit();
+        
+        // Create notification for the user
+        await createNotification(userId, {
+            type: 'club_approved',
+            title: 'Club Join Request Approved!',
+            message: `Your request to join "${clubData.name}" has been approved. Welcome to the club!`,
+            clubId,
+            clubName: clubData.name
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error approving join request:', error);
+        throw error;
+    }
+};
+
+// Reject join request
+export const rejectJoinRequest = async (clubId, requestId, approverUserId, reason = '') => {
+    try {
+        // Get the request first
+        const requestRef = doc(db, 'clubs', clubId, 'joinRequests', requestId);
+        const requestSnap = await getDoc(requestRef);
+        
+        if (!requestSnap.exists()) {
+            throw new Error('Join request not found');
+        }
+        
+        const requestData = requestSnap.data();
+        const userId = requestData.userId;
+        
+        // Get club data
+        const clubRef = doc(db, 'clubs', clubId);
+        const clubSnap = await getDoc(clubRef);
+        const clubData = clubSnap.data();
+        
+        // Update request status
+        await updateDoc(requestRef, {
+            status: 'rejected',
+            processedAt: serverTimestamp(),
+            processedBy: approverUserId,
+            rejectionReason: reason
+        });
+        
+        // Create notification for the user
+        await createNotification(userId, {
+            type: 'club_rejected',
+            title: 'Club Join Request Declined',
+            message: `Your request to join "${clubData.name}" was not approved.${reason ? ` Reason: ${reason}` : ''}`,
+            clubId,
+            clubName: clubData.name
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error rejecting join request:', error);
+        throw error;
+    }
+};
+
+// Get all clubs where user is faculty coordinator
+export const getFacultyClubs = async (facultyUserId) => {
+    try {
+        const clubsRef = collection(db, 'clubs');
+        const q = query(
+            clubsRef,
+            where('facultyCoordinatorId', '==', facultyUserId),
+            orderBy('createdAt', 'desc')
+        );
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error getting faculty clubs:', error);
+        throw error;
+    }
+};
+
+// Get all pending join requests for faculty's clubs
+export const getAllPendingRequestsForFaculty = async (facultyUserId) => {
+    try {
+        // First get all clubs where user is coordinator
+        const clubs = await getFacultyClubs(facultyUserId);
+        
+        // Get pending requests for each club
+        const allRequests = [];
+        for (const club of clubs) {
+            const requests = await getPendingJoinRequests(club.id);
+            // Add club info to each request
+            requests.forEach(req => {
+                allRequests.push({
+                    ...req,
+                    clubName: club.name,
+                    clubLogoURL: club.logoURL
+                });
+            });
+        }
+        
+        // Sort by request date
+        allRequests.sort((a, b) => {
+            const dateA = a.requestedAt?.toDate?.() || new Date(0);
+            const dateB = b.requestedAt?.toDate?.() || new Date(0);
+            return dateA - dateB;
+        });
+        
+        return allRequests;
+    } catch (error) {
+        console.error('Error getting all pending requests:', error);
+        throw error;
+    }
+};
+
+// Get faculty dashboard stats
+export const getFacultyStats = async (facultyUserId) => {
+    try {
+        // Get faculty's clubs
+        const clubs = await getFacultyClubs(facultyUserId);
+        
+        let totalMembers = 0;
+        let pendingRequests = 0;
+        let totalRevenue = 0;
+        
+        for (const club of clubs) {
+            totalMembers += club.memberCount || 0;
+            
+            // Get pending requests count
+            const requests = await getPendingJoinRequests(club.id);
+            pendingRequests += requests.length;
+            
+            // Get club payments for revenue (only paid clubs)
+            if (club.isPaid) {
+                const paymentsRef = collection(db, 'clubs', club.id, 'payments');
+                const paymentsQ = query(paymentsRef, where('status', '==', 'completed'));
+                const paymentsSnap = await getDocs(paymentsQ);
+                paymentsSnap.forEach(doc => {
+                    totalRevenue += doc.data().amount || 0;
+                });
+            }
+        }
+        
+        // Get events created by faculty
+        const eventsRef = collection(db, 'events');
+        const eventsQ = query(eventsRef, where('organizerId', '==', facultyUserId));
+        const eventsSnap = await getDocs(eventsQ);
+        const totalEvents = eventsSnap.size;
+        
+        // Calculate event revenue
+        let eventRevenue = 0;
+        for (const eventDoc of eventsSnap.docs) {
+            const eventData = eventDoc.data();
+            if (eventData.isPaid) {
+                const eventPaymentsRef = collection(db, 'events', eventDoc.id, 'payments');
+                const eventPaymentsQ = query(eventPaymentsRef, where('status', '==', 'completed'));
+                const eventPaymentsSnap = await getDocs(eventPaymentsQ);
+                eventPaymentsSnap.forEach(doc => {
+                    eventRevenue += doc.data().amount || 0;
+                });
+            }
+        }
+        
+        return {
+            totalClubs: clubs.length,
+            totalMembers,
+            pendingRequests,
+            totalEvents,
+            clubRevenue: totalRevenue,
+            eventRevenue,
+            totalRevenue: totalRevenue + eventRevenue
+        };
+    } catch (error) {
+        console.error('Error getting faculty stats:', error);
+        throw error;
+    }
+};
+
+// Get faculty's events
+export const getFacultyEvents = async (facultyUserId, filter = 'all') => {
+    try {
+        const eventsRef = collection(db, 'events');
+        let q;
+        
+        if (filter === 'upcoming') {
+            const todayString = new Date().toISOString().split('T')[0];
+            q = query(
+                eventsRef,
+                where('organizerId', '==', facultyUserId),
+                where('date', '>=', todayString),
+                orderBy('date', 'asc')
+            );
+        } else if (filter === 'past') {
+            const todayString = new Date().toISOString().split('T')[0];
+            q = query(
+                eventsRef,
+                where('organizerId', '==', facultyUserId),
+                where('date', '<', todayString),
+                orderBy('date', 'desc')
+            );
+        } else {
+            q = query(
+                eventsRef,
+                where('organizerId', '==', facultyUserId),
+                orderBy('createdAt', 'desc')
+            );
+        }
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error getting faculty events:', error);
+        throw error;
+    }
+};
+
+// Get club payment history for faculty
+export const getClubPaymentHistory = async (clubId) => {
+    try {
+        const paymentsRef = collection(db, 'clubs', clubId, 'payments');
+        const q = query(paymentsRef, orderBy('createdAt', 'desc'));
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error getting club payment history:', error);
+        throw error;
     }
 };

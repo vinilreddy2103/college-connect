@@ -1,10 +1,12 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FaCalendarAlt, FaMapMarkerAlt, FaComment, FaArrowRight, FaRupeeSign, FaUsers } from 'react-icons/fa';
 import LikeButton from './LikeButton';
 import ShareButton from './ShareButton';
 import { formatPrice, getRemainingSpots, isEventSoldOut } from '../firebase';
 
 function EventCard({ event, onViewDetails }) {
+    const navigate = useNavigate();
     const placeholderImage = 'https://via.placeholder.com/400x200.png?text=Event+Poster';
 
     const eventDate = new Date(event.date);
@@ -14,6 +16,14 @@ function EventCard({ event, onViewDetails }) {
     const soldOut = isEventSoldOut(event);
     const remainingSpots = getRemainingSpots(event);
 
+    const handleViewDetails = () => {
+        if (onViewDetails) {
+            onViewDetails(event);
+        } else {
+            navigate(`/event/${event.id}`);
+        }
+    };
+
     return (
         <div className="group relative gradient-border card-hover overflow-hidden animate-fade-in">
             {/* Image container */}
@@ -21,8 +31,8 @@ function EventCard({ event, onViewDetails }) {
                 <img
                     src={event.posterURL || placeholderImage}
                     alt={event.title}
-                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
-                    onClick={() => onViewDetails(event)}
+                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                    onClick={handleViewDetails}
                 />
                 
                 {/* Gradient overlay */}
@@ -114,7 +124,7 @@ function EventCard({ event, onViewDetails }) {
                             compact 
                         />
                         <button
-                            onClick={() => onViewDetails(event)}
+                            onClick={handleViewDetails}
                             className="flex items-center gap-1.5 text-gray-500 hover:text-fuchsia-400 transition-colors"
                         >
                             <FaComment className="text-sm" />
@@ -123,7 +133,7 @@ function EventCard({ event, onViewDetails }) {
                     </div>
                     
                     <button
-                        onClick={() => onViewDetails(event)}
+                        onClick={handleViewDetails}
                         className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg ${
                             soldOut 
                                 ? 'bg-slate-600 cursor-not-allowed shadow-none' 

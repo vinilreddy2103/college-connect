@@ -5,7 +5,9 @@ import DashboardHeader from '../components/DashboardHeader';
 import Modal from '../components/Modal';
 import CreateEventForm from '../components/CreateEventForm';
 import EventCard from '../components/EventCard';
-import { getApprovedEventsByCollege, getPendingEventsByCollege, updateEventStatus } from '../firebase';
+import FacultyBanner from '../components/FacultyBanner';
+import CollegeAdminBanner from '../components/CollegeAdminBanner';
+import { getApprovedEventsByCollege, getPendingEventsByCollege, updateEventStatus, getFacultyStats, getAllPendingRequestsForFaculty, getUsersByCollege } from '../firebase';
 import { toast } from 'react-toastify';
 import EventDetailsModal from '../components/EventDetailsModal';
 import { FaCalendarAlt, FaMapMarkerAlt, FaClock, FaArrowRight, FaPlus, FaCog, FaCheck, FaTimes, FaFire, FaHeart, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
@@ -450,8 +452,82 @@ const CollegeAdminDashboard = ({ userData }) => {
 
 
 function HomePage() {
-    const { userData, loading } = useAuth();
+    const { userData, loading, currentUser } = useAuth();
     const [isCreateEventModalOpen, setCreateEventModalOpen] = useState(false);
+    const [showFacultyBanner, setShowFacultyBanner] = useState(true);
+    const [showCollegeAdminBanner, setShowCollegeAdminBanner] = useState(true);
+    const [facultyStats, setFacultyStats] = useState(null);
+    const [collegeAdminStats, setCollegeAdminStats] = useState(null);
+
+    // Check if user is faculty, collegeAdmin, or admin
+    const isFacultyOrAdmin = ['faculty', 'collegeAdmin', 'admin'].includes(userData?.role);
+    const isCollegeAdmin = userData?.role === 'collegeAdmin';
+
+    // Load faculty stats if applicable
+    useEffect(() => {
+        const loadFacultyStats = async () => {
+            if (isFacultyOrAdmin && currentUser?.uid) {
+                try {
+                    const stats = await getFacultyStats(currentUser.uid);
+                    const pendingRequests = await getAllPendingRequestsForFaculty(currentUser.uid);
+                    setFacultyStats({
+                        clubsCount: stats?.totalClubs || 0,
+                        pendingRequestsCount: pendingRequests?.length || 0
+                    });
+                } catch (error) {
+                    console.error('Error loading faculty stats:', error);
+                }
+            }
+        };
+
+        // Check localStorage for banner dismissal
+        const dismissed = localStorage.getItem('facultyBannerDismissed');
+        if (dismissed === 'true') {
+            setShowFacultyBanner(false);
+        }
+
+        loadFacultyStats();
+    }, [isFacultyOrAdmin, currentUser]);
+
+    // Load college admin stats if applicable
+    useEffect(() => {
+        const loadCollegeAdminStats = async () => {
+            if (isCollegeAdmin && userData?.collegeId) {
+                try {
+                    // Get total users count - we'll need to create this function
+                    const usersSnapshot = await getUsersByCollege(userData.collegeId);
+                    const pendingEvents = await getPendingEventsByCollege(userData.collegeId);
+                    const allEvents = await getApprovedEventsByCollege(userData.collegeId);
+                    
+                    setCollegeAdminStats({
+                        totalUsers: usersSnapshot?.length || 0,
+                        pendingEventsCount: pendingEvents?.length || 0,
+                        totalEvents: allEvents?.length || 0
+                    });
+                } catch (error) {
+                    console.error('Error loading college admin stats:', error);
+                }
+            }
+        };
+
+        // Check localStorage for banner dismissal
+        const dismissed = localStorage.getItem('collegeAdminBannerDismissed');
+        if (dismissed === 'true') {
+            setShowCollegeAdminBanner(false);
+        }
+
+        loadCollegeAdminStats();
+    }, [isCollegeAdmin, userData?.collegeId]);
+
+    const handleDismissFacultyBanner = () => {
+        setShowFacultyBanner(false);
+        localStorage.setItem('facultyBannerDismissed', 'true');
+    };
+
+    const handleDismissCollegeAdminBanner = () => {
+        setShowCollegeAdminBanner(false);
+        localStorage.setItem('collegeAdminBannerDismissed', 'true');
+    };
 
     const renderDashboard = () => {
         if (!userData) {
@@ -504,6 +580,22 @@ function HomePage() {
                         {userData?.collegeName ? `Events happening at ${userData.collegeName}` : 'Discover events happening around you'}
                     </p>
                 </div>
+
+                {/* Faculty Banner */}
+                {isFacultyOrAdmin && !isCollegeAdmin && showFacultyBanner && facultyStats && (
+                    <FacultyBanner 
+                        stats={facultyStats} 
+                        onDismiss={handleDismissFacultyBanner} 
+                    />
+                )}
+
+                {/* College Admin Banner */}
+                {isCollegeAdmin && showCollegeAdminBanner && collegeAdminStats && (
+                    <CollegeAdminBanner 
+                        stats={collegeAdminStats} 
+                        onDismiss={handleDismissCollegeAdminBanner} 
+                    />
+                )}
 
                 {renderDashboard()}
             </main>

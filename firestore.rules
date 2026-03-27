@@ -21,7 +21,7 @@ service cloud.firestore {
     }
     
     function isCollegeAdmin() {
-      return isAuthenticated() && getUserData().role == 'college_admin';
+      return isAuthenticated() && getUserData().role == 'collegeAdmin';
     }
     
     function isEventOrganizer(eventId) {
@@ -33,7 +33,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin() || (
+        isCollegeAdmin() && 
+        // College admin can only update users in their college
+        resource.data.collegeId == getUserData().collegeId &&
+        // And can only update role field
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'updatedAt'])
+      );
       allow delete: if isAdmin();
       
       // User registrations subcollection
@@ -132,6 +138,122 @@ service cloud.firestore {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) || isAdmin();
+    }
+    
+    // User clubs subcollection (clubs user has joined)
+    match /users/{userId}/clubs/{clubId} {
+      allow read: if isAuthenticated();
+      // Allow owner or club coordinator/leader to write (for approvals)
+      allow write: if isOwner(userId) || (isAuthenticated() && (
+        get(/databases/$(database)/documents/clubs/$(clubId)).data.facultyCoordinatorId == request.auth.uid ||
+        get(/databases/$(database)/documents/clubs/$(clubId)).data.leaderId == request.auth.uid
+      ));
+    }
+
+    // Clubs collection
+    match /clubs/{clubId} {
+      // Helper to get club data
+      function getClubData() {
+        return get(/databases/$(database)/documents/clubs/$(clubId)).data;
+      }
+      
+      // Helper to check if user is club leader or coordinator
+      function isClubLeader() {
+        return isAuthenticated() && 
+               resource.data.leaderId == request.auth.uid;
+      }
+      
+      function isClubCoordinator() {
+        return isAuthenticated() && 
+               resource.data.facultyCoordinatorId == request.auth.uid;
+      }
+      
+      // For subcollections - check parent club
+      function isClubLeaderFromParent() {
+        return isAuthenticated() && 
+               getClubData().leaderId == request.auth.uid;
+      }
+      
+      function isClubCoordinatorFromParent() {
+        return isAuthenticated() && 
+               getClubData().facultyCoordinatorId == request.auth.uid;
+      }
+      
+      allow read: if true;
+      allow create: if isAuthenticated() && (isCollegeAdmin() || getUserData().role == 'faculty');
+      allow update: if isAuthenticated() && (
+        isClubLeader() || 
+        isClubCoordinator() || 
+        isCollegeAdmin() || 
+        isAdmin() ||
+        // Allow member count updates
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount']))
+      );
+      allow delete: if isCollegeAdmin() || isAdmin();
+      
+      // Club members subcollection
+      match /members/{userId} {
+        allow read: if isAuthenticated();
+        // Allow self-join OR coordinator/leader can add members (for approvals)
+        allow create: if isOwner(userId) || isClubLeaderFromParent() || isClubCoordinatorFromParent() || isCollegeAdmin();
+        allow update: if isOwner(userId) || isClubLeaderFromParent() || isClubCoordinatorFromParent() || isCollegeAdmin();
+        allow delete: if isOwner(userId) || isClubLeaderFromParent() || isClubCoordinatorFromParent() || isCollegeAdmin();
+      }
+      
+      // Club payments subcollection (for paid memberships)
+      match /payments/{paymentId} {
+        allow read: if isAuthenticated() && (
+          resource.data.userId == request.auth.uid ||
+          isClubLeaderFromParent() ||
+          isClubCoordinatorFromParent() ||
+          isCollegeAdmin() ||
+          isAdmin()
+        );
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow update: if isAuthenticated() && (
+          resource.data.userId == request.auth.uid ||
+          isClubLeaderFromParent() ||
+          isClubCoordinatorFromParent() ||
+          isCollegeAdmin()
+        );
+      }
+      
+      // Club join requests subcollection (for approval-required clubs)
+      match /joinRequests/{requestId} {
+        allow read: if isAuthenticated() && (
+          // User can read their own request
+          resource.data.userId == request.auth.uid ||
+          // Club leadership can read all
+          isClubLeaderFromParent() ||
+          isClubCoordinatorFromParent() ||
+          isCollegeAdmin() ||
+          isAdmin()
+        );
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow update: if isAuthenticated() && (
+          isClubLeaderFromParent() ||
+          isClubCoordinatorFromParent() ||
+          isCollegeAdmin()
+        );
+        allow delete: if isAuthenticated() && (
+          resource.data.userId == request.auth.uid ||
+          isClubLeaderFromParent() ||
+          isClubCoordinatorFromParent() ||
+          isCollegeAdmin()
+        );
+      }
+    }
+    
+    // Fests collection
+    match /fests/{festId} {
+      allow read: if true; // Anyone can view fests
+      allow create: if isAuthenticated() && isCollegeAdmin();
+      allow update: if isAuthenticated() && (
+        isCollegeAdmin() && resource.data.collegeId == getUserData().collegeId
+      );
+      allow delete: if isAuthenticated() && (
+        isCollegeAdmin() && resource.data.collegeId == getUserData().collegeId
+      );
     }
   }
 }

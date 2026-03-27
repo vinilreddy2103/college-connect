@@ -28,8 +28,8 @@
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
       ]
     },
@@ -39,6 +39,39 @@
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "isPaid", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizerId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizerId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizerId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clubId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
       ]
     },
@@ -54,6 +87,105 @@
       "collectionGroup": "payments",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clubs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "memberCount", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clubs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "isPaid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "memberCount", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clubs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "memberCount", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clubs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "isPaid", "order": "ASCENDING" },
+        { "fieldPath": "memberCount", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clubs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "facultyCoordinatorId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "joinRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "festId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "festId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "festId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clubId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]

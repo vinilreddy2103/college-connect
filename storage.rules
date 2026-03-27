@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // User profile photos
+    match /profile-photos/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Event images
+    match /event-images/{eventId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Club logos
+    match /club-logos/{clubId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Club banners
+    match /club-banners/{clubId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // College logos and assets
+    match /college-assets/{collegeId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+  }
+}

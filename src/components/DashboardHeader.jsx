@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { logout, markNotificationRead, markAllNotificationsRead, deleteNotification, clearAllNotifications } from '../firebase';
 import logo from '../assets/logo.png';
-import { FaUserCircle, FaSearch, FaBell, FaPlus, FaSignOutAlt, FaUser, FaCompass, FaCalendarAlt, FaReceipt } from 'react-icons/fa';
+import { FaUserCircle, FaSearch, FaBell, FaPlus, FaSignOutAlt, FaUser, FaCompass, FaCalendarAlt, FaReceipt, FaUsers, FaChalkboardTeacher, FaCog, FaTrophy } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import NotificationBell from './NotificationBell';
 import NotificationSidebar from './NotificationSidebar';
@@ -20,6 +20,15 @@ function DashboardHeader({ onOpenCreateEvent }) {
         userData?.role === 'club-lead' ||
         userData?.role === 'collegeAdmin' ||
         (userData?.role === 'student' && collegeSettings?.festMode === true);
+
+    // Check if user is faculty, collegeAdmin, or admin (can access faculty dashboard)
+    const isFacultyOrAdmin = ['faculty', 'collegeAdmin', 'admin'].includes(userData?.role);
+
+    // Check if user is collegeAdmin
+    const isCollegeAdmin = userData?.role === 'collegeAdmin';
+
+    // Check if user is a student (show student-only sections)
+    const isStudent = userData?.role === 'student' || userData?.role === 'club-lead';
 
     const handleLogout = async () => {
         try {
@@ -123,19 +132,55 @@ function DashboardHeader({ onOpenCreateEvent }) {
                             <NavIndicator active={isActive('/browse')} />
                         </Link>
 
-                        <Link to="/my-events" className={navLinkClass('/my-events')}>
+                        <Link to="/clubs" className={navLinkClass('/clubs')}>
                             <span className="flex items-center gap-2">
-                                My Events
+                                <FaUsers className="text-xs" /> Clubs
                             </span>
-                            <NavIndicator active={isActive('/my-events')} />
+                            <NavIndicator active={isActive('/clubs')} />
                         </Link>
 
-                        <Link to="/activities" className={navLinkClass('/activities')}>
+                        <Link to="/fests" className={navLinkClass('/fests')}>
                             <span className="flex items-center gap-2">
-                                <FaBell className="text-xs" /> Activity
+                                <FaTrophy className="text-xs" /> Fests
                             </span>
-                            <NavIndicator active={isActive('/activities')} />
+                            <NavIndicator active={isActive('/fests')} />
                         </Link>
+
+                        {isStudent && (
+                            <>
+                                <Link to="/my-events" className={navLinkClass('/my-events')}>
+                                    <span className="flex items-center gap-2">
+                                        My Events
+                                    </span>
+                                    <NavIndicator active={isActive('/my-events')} />
+                                </Link>
+
+                                <Link to="/activities" className={navLinkClass('/activities')}>
+                                    <span className="flex items-center gap-2">
+                                        <FaBell className="text-xs" /> Activity
+                                    </span>
+                                    <NavIndicator active={isActive('/activities')} />
+                                </Link>
+                            </>
+                        )}
+
+                        {isFacultyOrAdmin && (
+                            <Link to="/faculty-dashboard" className={navLinkClass('/faculty-dashboard')}>
+                                <span className="flex items-center gap-2">
+                                    <FaChalkboardTeacher className="text-xs" /> Faculty
+                                </span>
+                                <NavIndicator active={isActive('/faculty-dashboard')} />
+                            </Link>
+                        )}
+
+                        {isCollegeAdmin && (
+                            <Link to="/college-admin" className={navLinkClass('/college-admin')}>
+                                <span className="flex items-center gap-2">
+                                    <FaCog className="text-xs" /> Admin
+                                </span>
+                                <NavIndicator active={isActive('/college-admin')} />
+                            </Link>
+                        )}
 
                         {canCreateEvent && (
                             <button
@@ -203,6 +248,28 @@ function DashboardHeader({ onOpenCreateEvent }) {
                                     Payment History
                                 </Link>
 
+                                {isFacultyOrAdmin && (
+                                    <Link
+                                        to="/faculty-dashboard"
+                                        className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-slate-700/50 hover:text-white transition-colors"
+                                        onClick={() => setIsDropdownOpen(false)}
+                                    >
+                                        <FaChalkboardTeacher className="text-purple-400" />
+                                        Faculty Dashboard
+                                    </Link>
+                                )}
+
+                                {isCollegeAdmin && (
+                                    <Link
+                                        to="/college-admin"
+                                        className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-slate-700/50 hover:text-white transition-colors"
+                                        onClick={() => setIsDropdownOpen(false)}
+                                    >
+                                        <FaCog className="text-indigo-400" />
+                                        College Admin
+                                    </Link>
+                                )}
+
                                 {/* Mobile nav */}
                                 <div className="md:hidden border-t border-slate-700 mt-1 pt-1">
                                     <Link
@@ -214,13 +281,31 @@ function DashboardHeader({ onOpenCreateEvent }) {
                                         Browse Events
                                     </Link>
                                     <Link
-                                        to="/activities"
+                                        to="/clubs"
                                         className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-slate-700/50 hover:text-white transition-colors"
                                         onClick={() => setIsDropdownOpen(false)}
                                     >
-                                        <FaBell className="text-orange-400" />
-                                        Activity
+                                        <FaUsers className="text-purple-400" />
+                                        Clubs
                                     </Link>
+                                    <Link
+                                        to="/fests"
+                                        className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-slate-700/50 hover:text-white transition-colors"
+                                        onClick={() => setIsDropdownOpen(false)}
+                                    >
+                                        <FaTrophy className="text-amber-400" />
+                                        Fests
+                                    </Link>
+                                    {isStudent && (
+                                        <Link
+                                            to="/activities"
+                                            className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-slate-700/50 hover:text-white transition-colors"
+                                            onClick={() => setIsDropdownOpen(false)}
+                                        >
+                                            <FaBell className="text-orange-400" />
+                                            Activity
+                                        </Link>
+                                    )}
                                     {canCreateEvent && (
                                         <button
                                             onClick={() => { onOpenCreateEvent(); setIsDropdownOpen(false); }}
