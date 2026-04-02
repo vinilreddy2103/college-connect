@@ -29,6 +29,8 @@ import ClubProfilePage from './pages/ClubProfilePage';
 import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import FestsPage from './pages/FestsPage';
 import FestDetailsPage from './pages/FestDetailsPage';
+import AdminSetupPage from './pages/AdminSetupPage';
+import OrganizedEventsPage from './pages/OrganizedEventsPage';
 
 function App() {
   return (
@@ -51,6 +53,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin-setup/:token" element={<AdminSetupPage />} />
           <Route path="/super-admin" element={<PrivateRoute><AdminPage /></PrivateRoute>} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -68,6 +71,9 @@ function App() {
           
           {/* Payments */}
           <Route path="/payments" element={<ProtectedRoute><PaymentHistoryPage /></ProtectedRoute>} />
+
+          {/* Organized Events */}
+          <Route path="/organized-events" element={<ProtectedRoute><OrganizedEventsPage /></ProtectedRoute>} />
 
           {/* Clubs */}
           <Route path="/clubs" element={<ProtectedRoute><ClubsPage /></ProtectedRoute>} />

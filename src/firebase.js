@@ -172,6 +172,405 @@ export const onCollegesUpdate = (callback) => {
     return unsubscribe;
 };
 
+// ============================================
+// SUPER ADMIN FUNCTIONS
+// ============================================
+
+// Get platform-wide statistics
+export const getPlatformStats = async () => {
+    try {
+        const [usersSnap, eventsSnap, clubsSnap, collegesSnap] = await Promise.all([
+            getDocs(collection(db, 'users')),
+            getDocs(collection(db, 'events')),
+            getDocs(collection(db, 'clubs')),
+            getDocs(collection(db, 'colleges'))
+        ]);
+
+        const activeColleges = collegesSnap.docs.filter(d => d.data().status !== 'inactive').length;
+        const approvedEvents = eventsSnap.docs.filter(d => d.data().status === 'approved').length;
+        const pendingEvents = eventsSnap.docs.filter(d => d.data().status === 'pending').length;
+        const activeClubs = clubsSnap.docs.filter(d => d.data().status === 'active').length;
+
+        return {
+            totalUsers: usersSnap.size,
+            totalEvents: eventsSnap.size,
+            approvedEvents,
+            pendingEvents,
+            totalClubs: clubsSnap.size,
+            activeClubs,
+            totalColleges: collegesSnap.size,
+            activeColleges
+        };
+    } catch (error) {
+        console.error('Error getting platform stats:', error);
+        throw error;
+    }
+};
+
+// Get all colleges with their stats
+export const getAllCollegesWithStats = async () => {
+    try {
+        const collegesSnap = await getDocs(collection(db, 'colleges'));
+        const colleges = [];
+
+        for (const collegeDoc of collegesSnap.docs) {
+            const collegeData = { id: collegeDoc.id, ...collegeDoc.data() };
+            
+            // Get user count for this college
+            const usersQ = query(collection(db, 'users'), where('collegeId', '==', collegeDoc.id));
+            const usersSnap = await getDocs(usersQ);
+            
+            // Get event count for this college
+            const eventsQ = query(collection(db, 'events'), where('collegeId', '==', collegeDoc.id));
+            const eventsSnap = await getDocs(eventsQ);
+            
+            // Get club count for this college
+            const clubsQ = query(collection(db, 'clubs'), where('collegeId', '==', collegeDoc.id));
+            const clubsSnap = await getDocs(clubsQ);
+
+            colleges.push({
+                ...collegeData,
+                stats: {
+                    users: usersSnap.size,
+                    events: eventsSnap.size,
+                    clubs: clubsSnap.size
+                }
+            });
+        }
+
+        return colleges;
+    } catch (error) {
+        console.error('Error getting colleges with stats:', error);
+        throw error;
+    }
+};
+
+// Update college details
+export const updateCollegeDetails = async (collegeId, updates) => {
+    try {
+        const collegeRef = doc(db, 'colleges', collegeId);
+        await updateDoc(collegeRef, {
+            ...updates,
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating college:', error);
+        throw error;
+    }
+};
+
+// Soft delete/restore college
+export const setCollegeStatus = async (collegeId, active) => {
+    try {
+        const collegeRef = doc(db, 'colleges', collegeId);
+        await updateDoc(collegeRef, {
+            status: active ? 'active' : 'inactive',
+            updatedAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error setting college status:', error);
+        throw error;
+    }
+};
+
+// Get all college admins across platform
+export const getAllCollegeAdmins = async () => {
+    try {
+        const adminsQ = query(collection(db, 'users'), where('role', '==', 'collegeAdmin'));
+        const snapshot = await getDocs(adminsQ);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
+        }));
+    } catch (error) {
+        console.error('Error getting college admins:', error);
+        throw error;
+    }
+};
+
+// Create admin invite
+export const inviteCollegeAdmin = async (email, collegeId, collegeName, invitedByName) => {
+    try {
+        // Check if invite already exists
+        const existingQ = query(
+            collection(db, 'adminInvites'),
+            where('email', '==', email),
+            where('status', '==', 'pending')
+        );
+        const existing = await getDocs(existingQ);
+        if (!existing.empty) {
+            throw new Error('An invite for this email already exists');
+        }
+
+        // Check if user already exists with this email
+        const usersQ = query(collection(db, 'users'), where('email', '==', email));
+        const existingUser = await getDocs(usersQ);
+        if (!existingUser.empty) {
+            throw new Error('A user with this email already exists');
+        }
+
+        // Generate secure token
+        const token = uuidv4();
+        
+        await addDoc(collection(db, 'adminInvites'), {
+            email,
+            collegeId,
+            collegeName,
+            token,
+            invitedBy: invitedByName,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+        });
+
+        // Log audit action
+        await logAuditAction('system', 'Admin', 'invite_admin', {
+            email,
+            collegeId,
+            collegeName
+        });
+
+        return { success: true, token };
+    } catch (error) {
+        console.error('Error inviting college admin:', error);
+        throw error;
+    }
+};
+
+// Verify admin invite token
+export const verifyAdminInvite = async (token) => {
+    try {
+        const invitesQ = query(
+            collection(db, 'adminInvites'),
+            where('token', '==', token),
+            where('status', '==', 'pending')
+        );
+        const snapshot = await getDocs(invitesQ);
+        
+        if (snapshot.empty) {
+            return { valid: false, error: 'Invalid or expired invite' };
+        }
+
+        const invite = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+        
+        // Check expiration
+        const expiresAt = invite.expiresAt?.toDate?.() || new Date(invite.expiresAt);
+        if (expiresAt < new Date()) {
+            return { valid: false, error: 'Invite has expired' };
+        }
+
+        return { valid: true, invite };
+    } catch (error) {
+        console.error('Error verifying invite:', error);
+        throw error;
+    }
+};
+
+// Complete admin setup (called after Firebase Auth user is created)
+export const completeAdminSetup = async (token, userId, displayName) => {
+    try {
+        // Get and verify invite
+        const { valid, invite, error } = await verifyAdminInvite(token);
+        if (!valid) {
+            throw new Error(error);
+        }
+
+        // Create user document with collegeAdmin role
+        await setDoc(doc(db, 'users', userId), {
+            uid: userId,
+            displayName,
+            email: invite.email,
+            photoURL: '',
+            role: 'collegeAdmin',
+            collegeId: invite.collegeId,
+            collegeName: invite.collegeName,
+            createdAt: serverTimestamp(),
+            invitedBy: invite.invitedBy
+        });
+
+        // Mark invite as completed
+        const inviteRef = doc(db, 'adminInvites', invite.id);
+        await updateDoc(inviteRef, {
+            status: 'completed',
+            completedAt: serverTimestamp(),
+            userId
+        });
+
+        // Log audit action
+        await logAuditAction(userId, displayName, 'admin_setup_complete', {
+            collegeId: invite.collegeId,
+            collegeName: invite.collegeName
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error completing admin setup:', error);
+        throw error;
+    }
+};
+
+// Get pending admin invites
+export const getPendingAdminInvites = async () => {
+    try {
+        const invitesQ = query(
+            collection(db, 'adminInvites'),
+            where('status', '==', 'pending'),
+            orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(invitesQ);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+            expiresAt: doc.data().expiresAt?.toDate?.() || doc.data().expiresAt
+        }));
+    } catch (error) {
+        console.error('Error getting pending invites:', error);
+        throw error;
+    }
+};
+
+// Cancel admin invite
+export const cancelAdminInvite = async (inviteId) => {
+    try {
+        const inviteRef = doc(db, 'adminInvites', inviteId);
+        await updateDoc(inviteRef, {
+            status: 'cancelled',
+            cancelledAt: serverTimestamp()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error cancelling invite:', error);
+        throw error;
+    }
+};
+
+// Revoke college admin (demote to faculty)
+export const revokeCollegeAdmin = async (userId, revokedByName) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) {
+            throw new Error('User not found');
+        }
+
+        const userData = userSnap.data();
+        
+        await updateDoc(userRef, {
+            role: 'faculty',
+            revokedAt: serverTimestamp(),
+            revokedBy: revokedByName
+        });
+
+        // Log audit action
+        await logAuditAction('system', revokedByName, 'revoke_admin', {
+            userId,
+            userName: userData.displayName,
+            collegeId: userData.collegeId
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error revoking admin:', error);
+        throw error;
+    }
+};
+
+// Log audit action
+export const logAuditAction = async (userId, userName, action, details = {}) => {
+    try {
+        await addDoc(collection(db, 'auditLogs'), {
+            userId,
+            userName,
+            action,
+            details,
+            timestamp: serverTimestamp()
+        });
+    } catch (error) {
+        console.error('Error logging audit action:', error);
+        // Don't throw - audit logging should not break main operations
+    }
+};
+
+// Get audit logs with filtering
+export const getAuditLogs = async (filters = {}, limitCount = 50) => {
+    try {
+        let q = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(limitCount));
+        
+        // Note: Firestore doesn't support multiple inequality filters
+        // For complex filtering, we'll do client-side filtering
+        const snapshot = await getDocs(q);
+        
+        let logs = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp
+        }));
+
+        // Client-side filtering
+        if (filters.action) {
+            logs = logs.filter(log => log.action === filters.action);
+        }
+        if (filters.collegeId) {
+            logs = logs.filter(log => log.details?.collegeId === filters.collegeId);
+        }
+
+        return logs;
+    } catch (error) {
+        console.error('Error getting audit logs:', error);
+        throw error;
+    }
+};
+
+// Get recent platform activity
+export const getRecentActivity = async (limitCount = 10) => {
+    try {
+        // Get recent users
+        const usersQ = query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(5));
+        const usersSnap = await getDocs(usersQ);
+        
+        // Get recent events
+        const eventsQ = query(collection(db, 'events'), orderBy('createdAt', 'desc'), limit(5));
+        const eventsSnap = await getDocs(eventsQ);
+
+        const activity = [];
+
+        usersSnap.docs.forEach(doc => {
+            const data = doc.data();
+            activity.push({
+                type: 'user_signup',
+                message: `${data.displayName || data.email} joined ${data.collegeName || 'the platform'}`,
+                timestamp: data.createdAt?.toDate?.() || new Date(),
+                collegeId: data.collegeId
+            });
+        });
+
+        eventsSnap.docs.forEach(doc => {
+            const data = doc.data();
+            activity.push({
+                type: 'event_created',
+                message: `Event "${data.title}" created at ${data.collegeName || 'unknown college'}`,
+                timestamp: data.createdAt?.toDate?.() || new Date(),
+                collegeId: data.collegeId
+            });
+        });
+
+        // Sort by timestamp and limit
+        return activity
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, limitCount);
+    } catch (error) {
+        console.error('Error getting recent activity:', error);
+        throw error;
+    }
+};
+
 export const signUpWithEmail = async (email, password) => {
     try {
         const emailDomain = email.split('@')[1];
@@ -2001,6 +2400,188 @@ export const notifyEventCancelled = async (eventId, eventTitle, reason = '') => 
         });
     } catch (error) {
         console.error('Error notifying event cancellation:', error);
+    }
+};
+
+// ============================================
+// EVENT ORGANIZER FUNCTIONS
+// ============================================
+
+// Get all events created by an organizer
+export const getEventsByOrganizer = async (organizerId) => {
+    try {
+        const eventsRef = collection(db, 'events');
+        const q = query(
+            eventsRef,
+            where('organizerId', '==', organizerId),
+            orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error('Error getting organizer events:', error);
+        throw error;
+    }
+};
+
+// Get all registrations for an event with user details
+export const getEventRegistrations = async (eventId) => {
+    try {
+        const regsRef = collection(db, 'events', eventId, 'registrations');
+        const snapshot = await getDocs(regsRef);
+        
+        const registrations = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            registrationTime: doc.data().registrationTime?.toDate?.() || new Date(doc.data().registrationTime)
+        }));
+        
+        // Get payment info if any
+        const paymentsRef = collection(db, 'events', eventId, 'payments');
+        const paymentsSnap = await getDocs(paymentsRef);
+        const paymentsMap = {};
+        paymentsSnap.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.userId) {
+                paymentsMap[data.userId] = {
+                    paymentId: doc.id,
+                    amount: data.amount,
+                    status: data.status,
+                    razorpayPaymentId: data.razorpayPaymentId,
+                    createdAt: data.createdAt?.toDate?.() || null
+                };
+            }
+        });
+        
+        // Merge payment info with registrations
+        return registrations.map(reg => ({
+            ...reg,
+            payment: paymentsMap[reg.id] || null
+        }));
+    } catch (error) {
+        console.error('Error getting event registrations:', error);
+        throw error;
+    }
+};
+
+// Update event details (for organizer)
+export const updateEventDetails = async (eventId, updates, notifyUsers = false) => {
+    try {
+        const eventRef = doc(db, 'events', eventId);
+        const eventSnap = await getDoc(eventRef);
+        
+        if (!eventSnap.exists()) {
+            throw new Error('Event not found');
+        }
+        
+        const eventData = eventSnap.data();
+        
+        // Don't allow changing price if registrations exist
+        if (updates.price !== undefined && updates.price !== eventData.price) {
+            const regsRef = collection(db, 'events', eventId, 'registrations');
+            const regsSnap = await getDocs(regsRef);
+            if (regsSnap.size > 0) {
+                throw new Error('Cannot change price after registrations exist');
+            }
+        }
+        
+        await updateDoc(eventRef, {
+            ...updates,
+            updatedAt: serverTimestamp()
+        });
+        
+        // Notify registered users if requested
+        if (notifyUsers) {
+            await notifyEventUpdate(eventId, eventData.title, `Event details have been updated`);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Error updating event:', error);
+        throw error;
+    }
+};
+
+// Cancel an event
+export const cancelEvent = async (eventId, reason = '', refundPaid = false) => {
+    try {
+        const eventRef = doc(db, 'events', eventId);
+        const eventSnap = await getDoc(eventRef);
+        
+        if (!eventSnap.exists()) {
+            throw new Error('Event not found');
+        }
+        
+        const eventData = eventSnap.data();
+        
+        // Mark event as cancelled
+        await updateDoc(eventRef, {
+            status: 'cancelled',
+            cancelledAt: serverTimestamp(),
+            cancellationReason: reason
+        });
+        
+        // Notify all registered users
+        await notifyEventCancelled(eventId, eventData.title, reason || 'The event has been cancelled by the organizer');
+        
+        // TODO: If refundPaid is true, process refunds for paid events
+        // This would require Razorpay refund API integration
+        
+        return true;
+    } catch (error) {
+        console.error('Error cancelling event:', error);
+        throw error;
+    }
+};
+
+// Get organizer stats summary
+export const getOrganizerStats = async (organizerId) => {
+    try {
+        const events = await getEventsByOrganizer(organizerId);
+        
+        let totalRegistrations = 0;
+        let totalRevenue = 0;
+        let upcomingEvents = 0;
+        let pastEvents = 0;
+        let cancelledEvents = 0;
+        
+        const now = new Date();
+        
+        for (const event of events) {
+            totalRegistrations += event.registrationCount || 0;
+            
+            // Calculate revenue for paid events
+            if (event.isPaid && event.registrationCount > 0) {
+                totalRevenue += (event.price || 0) * (event.registrationCount || 0);
+            }
+            
+            // Count by status
+            if (event.status === 'cancelled') {
+                cancelledEvents++;
+            } else {
+                const eventDate = event.date?.toDate?.() || new Date(event.date);
+                if (eventDate > now) {
+                    upcomingEvents++;
+                } else {
+                    pastEvents++;
+                }
+            }
+        }
+        
+        return {
+            totalEvents: events.length,
+            totalRegistrations,
+            totalRevenue: totalRevenue / 100, // Convert from paisa to rupees
+            upcomingEvents,
+            pastEvents,
+            cancelledEvents
+        };
+    } catch (error) {
+        console.error('Error getting organizer stats:', error);
+        throw error;
     }
 };
 

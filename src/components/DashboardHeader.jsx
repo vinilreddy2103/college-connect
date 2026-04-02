@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { logout, markNotificationRead, markAllNotificationsRead, deleteNotification, clearAllNotifications } from '../firebase';
 import logo from '../assets/logo.png';
-import { FaUserCircle, FaSearch, FaBell, FaPlus, FaSignOutAlt, FaUser, FaCompass, FaCalendarAlt, FaReceipt, FaUsers, FaChalkboardTeacher, FaCog, FaTrophy } from 'react-icons/fa';
+import { FaUserCircle, FaSearch, FaBell, FaPlus, FaSignOutAlt, FaUser, FaCompass, FaCalendarAlt, FaReceipt, FaUsers, FaChalkboardTeacher, FaCog, FaTrophy, FaClipboardList } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import NotificationBell from './NotificationBell';
 import NotificationSidebar from './NotificationSidebar';
@@ -246,6 +246,15 @@ function DashboardHeader({ onOpenCreateEvent }) {
                                 >
                                     <FaReceipt className="text-emerald-400" />
                                     Payment History
+                                </Link>
+
+                                <Link
+                                    to="/organized-events"
+                                    className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-slate-700/50 hover:text-white transition-colors"
+                                    onClick={() => setIsDropdownOpen(false)}
+                                >
+                                    <FaClipboardList className="text-cyan-400" />
+                                    Organized Events
                                 </Link>
 
                                 {isFacultyOrAdmin && (

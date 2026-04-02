@@ -255,5 +255,20 @@ service cloud.firestore {
         isCollegeAdmin() && resource.data.collegeId == getUserData().collegeId
       );
     }
+    
+    // Admin Invites collection (Super Admin only)
+    match /adminInvites/{inviteId} {
+      // Anyone can read to verify token (for setup page)
+      allow read: if true;
+      // Only super admin can create/update/delete
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Audit Logs collection (Super Admin only)
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      // No update/delete - logs are immutable
+    }
   }
 }

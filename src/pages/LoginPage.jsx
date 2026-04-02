@@ -4,6 +4,7 @@ import { FcGoogle } from 'react-icons/fc';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { signInWithGoogle, signInWithEmail } from '../firebase';
 import { toast } from 'react-toastify';
+import logo from '../assets/logo.png';
 
 function LoginPage() {
     const navigate = useNavigate();
@@ -50,7 +51,14 @@ function LoginPage() {
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-900">
             <div className="w-full max-w-md p-8 space-y-8 bg-slate-800 rounded-lg shadow-lg">
+                {/* Logo and Branding */}
                 <div className="text-center">
+                    <div className="flex items-center justify-center gap-3 mb-4">
+                        <img src={logo} alt="College Connect" className="w-12 h-12" />
+                        <span className="text-2xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                            College Connect
+                        </span>
+                    </div>
                     <h1 className="text-3xl font-bold text-white">Login</h1>
                     <p className="mt-2 text-gray-400">Welcome back! Please enter your details.</p>
                 </div>
